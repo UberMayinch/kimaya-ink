@@ -41,6 +41,9 @@
     .item .fields div { display: flex; gap: 8px; flex-wrap: wrap; }
     .item .fields input { flex: 1; min-width: 120px; }
     .item .fields .song-pick { flex: 1; min-width: 200px; }
+    .song-preview { --song-max: 100%; }
+    .song-preview[hidden] { display: none; }
+    .card .edit .song-preview { --song-link: #6b665e; }
     .item .state { color: var(--dim); }
     .item.err .state { color: var(--stamp); }
     .item.done { opacity: .55; }
@@ -70,9 +73,9 @@
     <h2>LIVE</h2>
     <div class="queue" id="live"></div>
   </main>
-  <script src="songs.js?v=2"></script>
+  <script src="songs.js?v=3"></script>
   <script src="clips.js?v=2"></script>
   <script src="uploads.js?v=2"></script>
-  <script src="admin.js?v=4"></script>
+  <script src="admin.js?v=5"></script>
 </body>
 </html>

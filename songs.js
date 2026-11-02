@@ -1,6 +1,7 @@
 // a song on each photo: finds apple's 30s preview + one shared player + a chip ui
 // mount anywhere: el.append(KimayaSongs.chip({ title: "...", artist: "...", itunesId? }))
 // pick one: const p = KimayaSongs.picker(host); p.value() -> { title, artist, itunesId? } | null
+//   p.el fires kimaya:song-pick { song } when a track is picked (song with itunesId) or dropped (null)
 // events on window:
 //   kimaya:song         detail { state: "playing" | "paused" | "ended", song }
 //   kimaya:audio-claim  dispatch this from anything else that wants the speakers; songs pause
@@ -512,7 +513,9 @@
     }
 
     function unpick() {
+      const had = !!picked;
       picked = null;
+      if (had) wrap.dispatchEvent(new CustomEvent("kimaya:song-pick", { detail: { song: null }, bubbles: true }));
       art.hidden = true;
       art.removeAttribute("src");
       wrap.dataset.state = input.value.trim() ? "typed" : "empty";

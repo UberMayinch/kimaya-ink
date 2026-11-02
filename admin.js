@@ -66,7 +66,7 @@ function card(p, pending) {
   line1.append(name, date);
   const line2 = document.createElement("div");
   line2.append(song.el);
-  form.append(msg, line1, line2, save, state);
+  form.append(msg, line1, line2, songPreview(song), save, state);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     save.disabled = true;
@@ -135,6 +135,20 @@ async function load() {
 
 const items = [];
 
+// hear the picked song: a chip that follows the picker (only exact picks, by apple's id)
+function songPreview(picker) {
+  const slot = document.createElement("div");
+  slot.className = "song-preview";
+  const refresh = () => {
+    const s = picker.value();
+    slot.replaceChildren(...(s && s.itunesId ? [KimayaSongs.chip(s)] : []));
+    slot.hidden = !slot.childElementCount;
+  };
+  picker.el.addEventListener("kimaya:song-pick", refresh);
+  refresh();
+  return slot;
+}
+
 function field(placeholder, max, value = "") {
   const i = document.createElement("input");
   i.placeholder = placeholder;
@@ -189,7 +203,7 @@ function addItem(result, file) {
   const line = document.createElement("div");
   line.append(name, date, drop);
   const songLine = document.createElement("div");
-  songLine.append(song.el);
+  songLine.append(song.el, songPreview(song));
   const fields = document.createElement("div");
   fields.className = "fields";
   fields.append(caption, line, songLine, state);

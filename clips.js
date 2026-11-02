@@ -126,7 +126,7 @@
     frame(g, v, o, 0, date);
     if (o.onstart) o.onstart(c);
 
-    const out = c.captureStream(o.fps);
+    const out = c.captureStream();
     const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: o.bitrate });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };

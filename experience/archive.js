@@ -9,8 +9,8 @@
 //     -> { lcd, items, open(), close(), isOpen(), t, view, sel, select(i), step(dir), onAction(action, hit),
 //          drawLCD(), live(), rec, tick(now), srText }
 
-import { loadArchive, letterParagraphs } from "./archive-data.js?v=33";
-import { stampOf, wait } from "./util.js?v=33";
+import { loadArchive, letterParagraphs } from "./archive-data.js?v=34";
+import { stampOf, wait } from "./util.js?v=34";
 
 const W = 640, H = 480;
 const LEFT = 104; // the top-left of the screen sits under her sticker
@@ -127,7 +127,8 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     window.addEventListener("kimaya:audio-claim", (e) => { if (e.detail !== "voice" && !el.paused) el.pause(); });
     return el;
   }
-  function duck(on) { window.KimayaSound?.duck(on); }
+  // the bed under a clip's own sound: nearly out, unless it's the memory's own song, which just steps back
+  function duck(on) { window.KimayaSound?.duck(on, on && current()?.song ? 0.25 : undefined); }
   function analyserFor(el) {
     if (audio.analyser) return audio.analyser;
     try {
@@ -186,7 +187,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     stopAudio();
     stopClip();
     window.KimayaSongs?.pause();
-    songChip();
+    pageSong();
     journey.classList.remove("focused");
     document.body.classList.remove("j-locked");
     if (document.activeElement?.closest?.(".j-focusmode")) setTimeout(() => journey.querySelector(".j-see")?.focus({ preventScroll: true }), 200);
@@ -215,9 +216,10 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
       A.page = 0;
       flipped(performance.now());
       stopAudio();
+      stopClip(); // the next clip starts silent: sound is a choice, one memory at a time
       window.KimayaSound?.cue("beep");
     }
-    songChip();
+    pageSong();
     announce();
     mark();
   }
@@ -229,12 +231,12 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     A.page = 0;
     flipped(performance.now());
     window.KimayaSound?.cue("beep");
-    songChip();
+    pageSong();
     announce();
     mark();
   }
   function stopClip() {
-    if (!playVideo.muted) { playVideo.muted = true; duck(false); window.KimayaSongs?.accompany?.(null, false); }
+    if (!playVideo.muted) { playVideo.muted = true; duck(false); }
     if (!playVideo.dataset.src) return;
     playVideo.pause();
     playVideo.removeAttribute("src");
@@ -248,23 +250,20 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
       playVideo.muted = false;
       playVideo.currentTime = 0;
       playVideo.play().catch(() => {});
-      duck(true);
-      const song = current()?.song;
-      if (song && window.KimayaSongs?.accompany) window.KimayaSongs.accompany(song, true); // quietly, under the clip
+      duck(true); // the page's song is this memory's song already (pageSong), it just steps back
     } else {
       playVideo.muted = true;
       duck(false);
-      window.KimayaSongs?.accompany?.(null, false);
     }
     announce();
     mark();
   }
-  window.addEventListener("kimaya:audio-claim", (e) => { if (e.detail !== "clip" && !playVideo.muted) { playVideo.muted = true; duck(false); window.KimayaSongs?.accompany?.(null, false); announce(); } });
+  window.addEventListener("kimaya:audio-claim", (e) => { if (e.detail !== "clip" && !playVideo.muted) { playVideo.muted = true; duck(false); announce(); } });
   function toIndex() {
     stopAudio();
     stopClip();
     A.view = "index";
-    songChip();
+    pageSong();
     announce();
     mark();
   }
@@ -485,8 +484,9 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     const cap = (it.caption || "") + (it.by ? `  — ${it.by}` : "");
     if (cap.trim()) text(cap.length > 46 ? cap.slice(0, 45) + "…" : cap, 16, H - 27, { font: "serif", size: 28, color: INK });
     if (it.song) {
-      const line = `♪ ${it.song.title} — ${it.song.artist}`;
-      text(line.length > 40 ? line.slice(0, 39) + "…" : line, LEFT, 64, { size: 26, color: INK });
+      const on = !!window.KimayaSound?.isOn?.();
+      const line = `${on && !blinkOn ? " " : "♪"} ${it.song.title}${it.song.artist ? ` — ${it.song.artist}` : ""}`;
+      text(line.length > 40 ? line.slice(0, 39) + "…" : line, LEFT, 64, { size: 26, color: on ? HUD : INK });
     }
     if (it.date && !it.stamped) text(stampOf(new Date(it.date + "T12:00:00")), W - 16, H - 74, { align: "right", size: 34, color: ORANGE, glow: 0.9 });
   }
@@ -621,13 +621,11 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     if (grid) grid.setAttribute("aria-pressed", A.view === "index" ? "true" : "false");
   }
 
-  // the current photo's song gets a real play chip in the overlay
-  const songSlot = $(".j-song");
-  function songChip() {
-    if (!songSlot) return;
+  // the memory you're looking at sets the page's song (soundtrack.js), and it stays after you leave.
+  // the title is written on the screen itself (drawItem); nothing about it lives outside the camera
+  function pageSong() {
     const it = current();
-    const show = A.open && rec.mode === "play" && A.view === "item" && it?.song && window.KimayaSongs;
-    songSlot.replaceChildren(...(show ? [window.KimayaSongs.chip(it.song)] : []));
+    if (A.open && rec.mode === "play" && A.view === "item" && it?.song) window.KimayaSound?.setSong?.(it.song);
   }
 
   // ---------- REC: the visitor-camera flow (unchanged from the old journey.js) ----------
@@ -669,7 +667,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
   function setMode(mode) {
     rec.mode = mode;
     journey.dataset.lcd = mode;
-    songChip();
+    pageSong();
     if (ui.err) ui.err.textContent = "";
     if (mode === "play") announce();
     else announceRec(REC_COPY[mode] || mode);
@@ -926,7 +924,12 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
   if (ui.upload) {
     ui.upload.hidden = !window.KimayaUploads;
     ui.upload.addEventListener("click", (e) => { e.stopPropagation(); ui.file.click(); });
-    ui.file.addEventListener("change", () => { upload(ui.file.files[0]); ui.file.value = ""; });
+    ui.file.addEventListener("change", () => {
+      const files = [...ui.file.files];
+      ui.file.value = "";
+      if (files.length > 1) window.dispatchEvent(new CustomEvent("kimaya:drop", { detail: { files } })); // several: the drop takes them
+      else upload(files[0]);
+    });
   }
   on(".j-a-close", "click", () => onAction("menu"));
   on(".j-a-home", "click", () => onAction("home"));

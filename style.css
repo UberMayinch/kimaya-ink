@@ -411,7 +411,8 @@ body {
 /* ---------- guestbook ---------- */
 
 .guestbook { margin-top: clamp(40px, 7vw, 80px); }
-.guestbook-head { margin-bottom: 20px; }
+.guestbook-head { margin-bottom: 20px; flex-wrap: wrap; row-gap: 10px; }
+.guestbook-actions { display: inline-flex; flex-wrap: wrap; gap: 8px; }
 
 .hud-btn {
   all: unset;
@@ -542,6 +543,17 @@ body {
 .booth[data-state="review"] .booth-up { display: block; }
 .fine { color: var(--dim); font-size: 18px; }
 .booth-sent p:first-child { color: var(--hud); font-size: 40px; letter-spacing: .14em; }
+@media (max-width: 640px) {
+  .guestbook-head { flex-direction: column; align-items: flex-start; }
+  .guestbook-actions { display: flex; }
+  .guestbook-actions .hud-btn { font-size: 17px; padding: 4px 8px; }
+  .booth { padding: 8px; }
+  .booth-lcd { padding: 10px; gap: 10px; }
+  .booth[data-state="intro"] .booth-screen { aspect-ratio: auto; min-height: 240px; display: grid; }
+  .booth[data-state="intro"] .booth-intro { position: relative; inset: auto; padding: 18px 12px; font-size: 19px; gap: 8px; }
+  .booth-intro .fine, .booth-sent .fine { font-size: 15px; }
+  .booth-form .row { flex-wrap: wrap; gap: 8px; }
+}
 
 .shutter {
   all: unset;
@@ -602,6 +614,79 @@ body {
   pointer-events: none;
 }
 .booth-white.on { opacity: 1; }
+
+/* ---------- the drop (drop.js): many at once ---------- */
+
+.drop {
+  position: fixed;
+  inset: 0;
+  z-index: 46;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(6, 6, 7, .94);
+}
+.drop[hidden] { display: none; }
+body.drop-open { overflow: hidden; }
+.drop-lcd {
+  width: min(560px, 100%);
+  max-height: calc(100svh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--lcd);
+  border: 1px solid #2a2a2e;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, .6), 0 30px 80px rgba(0, 0, 0, .7);
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.drop-intro { margin: 0; color: var(--ink); font-size: 19px; line-height: 1.25; }
+.drop-intro .fine { display: block; margin-top: 4px; font-size: 16px; }
+.drop-pick { display: grid; justify-items: center; gap: 6px; }
+.drop-list { display: grid; gap: 8px; }
+.drop-list:empty { display: none; }
+.drop-item { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid #2a2a2e; padding: 8px; }
+.drop-thumb { aspect-ratio: 4 / 3; background: #000; overflow: hidden; }
+.drop-thumb img, .drop-thumb video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.drop-fields { display: grid; gap: 4px; min-width: 0; }
+.drop-fields input { width: 100%; min-width: 0; background: #0b0b0c; border: 1px solid #333; color: var(--ink); font: italic 17px var(--serif); padding: 5px 8px; }
+.drop-fields input:focus { outline: 1px solid var(--hud); }
+.drop-fields small { color: var(--dim); font-size: 15px; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drop-x { border: 0; font-size: 28px; line-height: 1; padding: 0 6px; color: var(--stamp); }
+.drop-form { display: grid; gap: 10px; }
+.drop-form[hidden] { display: none; }
+.drop-form input, .drop-form textarea {
+  width: 100%;
+  background: #0b0b0c;
+  border: 1px solid #333;
+  color: var(--ink);
+  font: italic 20px var(--serif);
+  padding: 8px 10px;
+  resize: none;
+}
+.drop-form input:focus, .drop-form textarea:focus { outline: 1px solid var(--hud); }
+.drop-form .msg { position: relative; }
+.drop-form .msg span { position: absolute; right: 8px; bottom: 6px; color: var(--dim); font-size: 16px; }
+.drop-form .row, .drop-sent .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.drop-count { color: var(--hud); letter-spacing: .08em; text-shadow: 0 0 6px rgba(159, 232, 200, .45); }
+.drop-sent { display: none; justify-items: center; gap: 10px; padding: 20px 0; text-align: center; font-size: 22px; }
+.drop-sent p { margin: 0; }
+.drop-sent p:first-child { color: var(--hud); font-size: 40px; letter-spacing: .14em; }
+.drop-sent .row { justify-content: center; }
+.drop[data-state="sent"] .drop-sent { display: grid; }
+.drop[data-state="sent"] .drop-intro, .drop[data-state="sent"] .drop-pick,
+.drop[data-state="sent"] .drop-list, .drop[data-state="sent"] .drop-form { display: none; }
+.drop[data-state="sending"] .drop-pick, .drop[data-state="sending"] .drop-list { opacity: .5; pointer-events: none; }
+.drop[data-state="sending"] .drop-pick .up-status { opacity: 1; }
+@media (max-width: 640px) {
+  .drop { padding: 0; }
+  .drop-lcd { max-height: 100svh; min-height: 100svh; border: 0; border-radius: 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .drop-item { grid-template-columns: 72px minmax(0, 1fr) auto; gap: 8px; }
+  .drop-intro { font-size: 17px; }
+  .drop-pick .hud-btn.big { font-size: 20px; }
+}
 
 /* ---------- the journey (journey.js) ---------- */
 
@@ -727,8 +812,19 @@ body:has(.journey.live):not(.j-released) { overflow: hidden; }
   opacity: var(--fade, 0);
 }
 .j-wishbtn:hover, .j-wishbtn:focus-visible { background: rgba(255, 74, 61, .22); }
-.journey.below .j-wishbtn { display: block; }
-.journey.focused .j-wishbtn { display: none; }
+.j-dropbtn {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 60px);
+  transform: translate(-50%, -50%);
+  display: none;
+  pointer-events: auto;
+  white-space: nowrap;
+  background: rgba(10, 12, 12, .55);
+  opacity: var(--fade, 0);
+}
+.journey.below .j-wishbtn, .journey.below .j-dropbtn { display: block; }
+.journey.focused .j-wishbtn, .journey.focused .j-dropbtn { display: none; }
 /* the footer of the black */
 .j-made {
   left: 50%;
@@ -888,18 +984,23 @@ body.j-locked { overflow: hidden; }
 /* the screen flash that actually lights the face */
 .j-white { position: fixed; inset: 0; z-index: 80; background: #fff; opacity: 0; pointer-events: none; }
 .j-white.on { opacity: 1; }
-.j-song { display: none; }
-.journey.focused:not([data-lcd]) .j-song,
-.journey.focused[data-lcd="play"] .j-song { display: block; }
 
 @media (max-width: 640px) {
-  .j-archive .hud-btn { font-size: 17px; padding: 4px 8px; }
+  .j-archive { gap: 4px; padding: 0 6px; }
+  .j-archive .hud-btn { font-size: 14px; padding: 3px 5px; min-width: 38px; min-height: 40px; letter-spacing: .04em; }
   .j-modes .hud-btn { font-size: 17px; }
   .j-cta { bottom: 112px; }
   .j-nav { bottom: 112px; }
   .journey.calm.in-camera .j-cta { bottom: 166px; }
-  .j-title { font-size: 24px; top: 18px; }
-  .j-wish { top: 52px; font-size: 18px; white-space: normal; width: calc(100% - 48px); text-align: center; }
+  /* the top of the screen in rows: REC and the sound toggle, then the title, then the wish */
+  .j-title { font-size: 24px; top: 50px; left: 12px; right: 12px; transform: none; white-space: normal; text-align: center; }
+  .j-wish { top: 88px; font-size: 18px; white-space: normal; width: calc(100% - 48px); text-align: center; }
+  .j-hud .j-credit { top: 20px; right: 100px; max-width: calc(100% - 200px); font-size: 13px; }
+  .journey.focused .j-hud .j-credit { top: 98px; right: 26px; max-width: 60vw; }
+  .j-rec-intro .hud-btn.big, .j-rec-sent .hud-btn.big { font-size: 19px; padding: 6px 10px; white-space: nowrap; }
+  .journey[data-lcd="intro"] .j-rec-intro { gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .j-dropbtn, .j-wishbtn { font-size: 21px; }
+  .j-dropbtn { top: calc(50% + 54px); }
 }
 
 /* letters and voice notes on the fallback page */

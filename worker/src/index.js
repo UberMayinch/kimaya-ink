@@ -2,6 +2,8 @@
 //
 // POST   /api/posts                  multipart: name, message, photo (jpeg), token (turnstile),
 //                                    optional taken_on (YYYY-MM-DD), optional clip (webm/mp4)
+//                                    several at once: photo.0, clip.0, taken_on.0, message.0 … up to 12
+//                                    (name and message are shared; a message.N replaces it for that one)
 // GET    /api/posts                  approved posts, by taken_on (fallback created_at), newest first, with has_clip
 // GET    /api/photo/:id              jpeg, approved only
 // GET    /api/clip/:id               webm/mp4, approved only, supports Range
@@ -20,13 +22,14 @@
 
 const MAX_PHOTO = 200 * 1024;
 const MAX_CLIP = 800 * 1024;
-const MAX_BODY = MAX_PHOTO + MAX_CLIP + 8 * 1024;
+const MAX_ITEMS = 12; // photos or clips in one post form
+const MAX_BODY = MAX_ITEMS * (MAX_PHOTO + MAX_CLIP) + 16 * 1024;
 const MAX_NAME = 24;
 const MAX_MESSAGE = 140;
 const MAX_SONG_TITLE = 80;
 const MAX_SONG_ARTIST = 60;
 const MAX_JSON = 8 * 1024;
-const PER_IP_PER_HOUR = 3;
+const PER_IP_PER_HOUR = 30; // posts (photos or clips) per ip per hour: a couple of drops of 12, or a few selfies
 const MAX_PENDING = 300;
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -152,6 +155,7 @@ async function createPost(req, env) {
 
   const fields = await readFields(form, true);
   if (fields.error) return fields.error;
+  const { items } = fields;
 
   const ipHash = await sha256(`${env.IP_SALT || ""}:${ip}`);
   const since = Date.now() - HOUR;
@@ -160,11 +164,11 @@ async function createPost(req, env) {
     env.DB.prepare("SELECT COUNT(*) AS n FROM posts WHERE ip_hash = ? AND created_at > ?").bind(ipHash, since).first(),
     env.DB.prepare("SELECT COUNT(*) AS n FROM posts WHERE status = 'pending'").first(),
   ]);
-  if (mine >= PER_IP_PER_HOUR) return json({ error: "slow down, try again later" }, 429);
-  if (pending >= MAX_PENDING) return json({ error: "guestbook is full right now" }, 503);
+  if (mine + items.length > PER_IP_PER_HOUR) return json({ error: "slow down, try again later" }, 429);
+  if (pending + items.length > MAX_PENDING) return json({ error: "guestbook is full right now" }, 503);
 
-  await insertPost(env, fields, ipHash, "pending");
-  return json({ ok: true, status: "pending" }, 201);
+  await insertPosts(env, items, ipHash, "pending");
+  return json({ ok: true, status: "pending", count: items.length }, 201);
 }
 
 async function readForm(req) {
@@ -177,26 +181,40 @@ async function readForm(req) {
   }
 }
 
-// shared by the public booth and the owner's bulk upload
+// shared by the public booth and the owner's bulk upload. one post: photo, clip, taken_on (+ a song).
+// several at once: photo.0, clip.0, taken_on.0, message.0 … (no songs). -> { items: [{ name, message, photo, … }] }
 async function readFields(form, textRequired) {
   const name = clean(form.get("name"), MAX_NAME);
   const message = clean(form.get("message"), MAX_MESSAGE);
-  if (textRequired && (!name || !message)) return { error: json({ error: "name and message required" }, 400) };
+  const song = readSong(form.get("song_title"), form.get("song_artist"), form.get("song_itunes"));
 
-  const raw = form.get("taken_on");
-  const takenOn = raw === null || raw === "" ? null : validDay(raw);
-  if (takenOn === false) return { error: json({ error: "taken_on must be a real YYYY-MM-DD date" }, 400) };
+  const suffixes = [];
+  if (form.has("photo")) suffixes.push("");
+  else for (let i = 0; i < MAX_ITEMS && form.has(`photo.${i}`); i++) suffixes.push(`.${i}`);
+  if (!suffixes.length) return { error: json({ error: "photo required" }, 400) };
+  if (form.has(`photo.${MAX_ITEMS}`)) return { error: json({ error: `${MAX_ITEMS} at once is the most` }, 400) };
 
-  const file = form.get("photo");
-  if (!file || typeof file === "string") return { error: json({ error: "photo required" }, 400) };
-  if (file.size > MAX_PHOTO) return { error: json({ error: "photo too big" }, 413) };
-  const photo = new Uint8Array(await file.arrayBuffer());
-  if (photo[0] !== 0xff || photo[1] !== 0xd8) return { error: json({ error: "photo must be jpeg" }, 415) };
+  const items = [];
+  for (const s of suffixes) {
+    const text = (s && clean(form.get(`message${s}`), MAX_MESSAGE)) || message;
+    if (textRequired && (!name || !text)) return { error: json({ error: "name and message required" }, 400) };
 
-  const clip = await readClip(form);
-  if (clip.error) return clip;
+    const raw = form.get(`taken_on${s}`);
+    const takenOn = raw === null || raw === "" ? null : validDay(raw);
+    if (takenOn === false) return { error: json({ error: "taken_on must be a real YYYY-MM-DD date" }, 400) };
 
-  return { name, message, photo, takenOn, clip: clip.bytes, clipType: clip.type, song: readSong(form.get("song_title"), form.get("song_artist"), form.get("song_itunes")) };
+    const file = form.get(`photo${s}`);
+    if (!file || typeof file === "string") return { error: json({ error: "photo required" }, 400) };
+    if (file.size > MAX_PHOTO) return { error: json({ error: "photo too big" }, 413) };
+    const photo = new Uint8Array(await file.arrayBuffer());
+    if (photo[0] !== 0xff || photo[1] !== 0xd8) return { error: json({ error: "photo must be jpeg" }, 415) };
+
+    const clip = await readClip(form, `clip${s}`);
+    if (clip.error) return clip;
+
+    items.push({ name, message: text, photo, takenOn, clip: clip.bytes, clipType: clip.type, song: s ? null : song });
+  }
+  return { items };
 }
 
 // the song that goes with a post: {title, artist, itunesId?} or null. a title alone is enough to look up.
@@ -220,8 +238,8 @@ function parseSong(v) {
 }
 
 // optional movie clip: webm (ebml magic) or mp4 (ftyp box), 800KB max
-async function readClip(form) {
-  const file = form.get("clip");
+async function readClip(form, key = "clip") {
+  const file = form.get(key);
   if (file === null || file === "") return {};
   if (typeof file === "string") return { error: json({ error: "clip must be a file" }, 400) };
   if (file.size > MAX_CLIP) return { error: json({ error: "clip too big" }, 413) };
@@ -240,25 +258,30 @@ function validDay(v) {
   return v;
 }
 
-async function insertPost(env, f, ipHash, status) {
-  const row = {
-    id: crypto.randomUUID(),
-    name: f.name,
-    message: f.message,
-    photo: f.photo,
-    ip_hash: ipHash,
-    status,
-    created_at: Date.now(),
-    taken_on: f.takenOn,
-  };
-  // clip columns come from migrations/0002_clips.sql, song from 0004_song.sql
-  if (f.clip) Object.assign(row, { clip: f.clip, clip_type: f.clipType });
-  if (f.song) row.song = JSON.stringify(f.song);
-  const cols = Object.keys(row);
-  await env.DB.prepare(`INSERT INTO posts (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
-    .bind(...Object.values(row))
-    .run();
-  return row.id;
+// all or nothing. the first picked gets the newest stamp, so a drop lists in the order it was chosen
+async function insertPosts(env, items, ipHash, status) {
+  const now = Date.now();
+  const ids = [];
+  const stmts = items.map((f, i) => {
+    const row = {
+      id: crypto.randomUUID(),
+      name: f.name,
+      message: f.message,
+      photo: f.photo,
+      ip_hash: ipHash,
+      status,
+      created_at: now - i,
+      taken_on: f.takenOn,
+    };
+    // clip columns come from migrations/0002_clips.sql, song from 0004_song.sql
+    if (f.clip) Object.assign(row, { clip: f.clip, clip_type: f.clipType });
+    if (f.song) row.song = JSON.stringify(f.song);
+    ids.push(row.id);
+    const cols = Object.keys(row);
+    return env.DB.prepare(`INSERT INTO posts (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).bind(...Object.values(row));
+  });
+  await env.DB.batch(stmts);
+  return ids;
 }
 
 // ---------- admin ----------
@@ -269,8 +292,8 @@ async function createAdminPost(req, env) {
   if (error) return error;
   const fields = await readFields(form, false);
   if (fields.error) return fields.error;
-  const id = await insertPost(env, fields, "admin", "approved");
-  return json({ ok: true, id, status: "approved" }, 201);
+  const ids = await insertPosts(env, fields.items, "admin", "approved");
+  return json({ ok: true, id: ids[0], ids, status: "approved", count: ids.length }, 201);
 }
 
 async function listPending(env) {

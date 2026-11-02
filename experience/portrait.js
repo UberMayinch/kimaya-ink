@@ -7,7 +7,7 @@
 //
 // world units: the plane is PW x PH (photo 1600x860 -> 18.6 x 10). +x right, +y up, +z towards us.
 
-import { clamp, lerp, smooth, smoother, GLSL_NOISE } from "./util.js?v=33";
+import { clamp, lerp, smooth, smoother, GLSL_NOISE } from "./util.js?v=34";
 
 export const PHOTO_W = 1600, PHOTO_H = 860;
 export const EYE_PX = { x: 548, y: 352, r: 28 };      // the portal eye (her right eye, nearer to us)
@@ -213,12 +213,14 @@ export function createPortrait(THREE, { photo, depth, fov = 35 }) {
   // distance at which the plane covers the viewport (with overscan so displaced edges never show)
   const cover = (aspect) => Math.min(PH / 2 / T, PW / 2 / (T * aspect)) * 0.9;
 
-  // the start composition: the whole photo, or on a tall screen the slice that holds her face
+  // the start composition: the whole photo, or on a tall screen the slice that holds her face.
+  // the narrower the screen, the more squarely it sits on her face, so the eye (the way in) stays in frame
   const start = { aim: new THREE.Vector3(), dist: 1 };
   function startPose(aspect) {
     const dist = cover(aspect);
     const halfW = dist * T * aspect, halfH = dist * T;
-    const ax = clamp(faceWorld.x * 0.6, -(PW / 2 - halfW), PW / 2 - halfW);
+    const tall = clamp((1 - aspect) / 0.35, 0, 1);
+    const ax = clamp(lerp(faceWorld.x * 0.6, faceWorld.x, tall), -(PW / 2 - halfW), PW / 2 - halfW);
     const ay = clamp(faceWorld.y * 0.3, -(PH / 2 - halfH), PH / 2 - halfH);
     start.aim.set(ax, ay, 0);
     start.dist = dist;

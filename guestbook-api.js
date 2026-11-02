@@ -1,6 +1,9 @@
 // guestbook api client shared by the camera LCD and the fallback booth.
-// window.KimayaGuestbook: { API, list(), photoURL(id), clipURL(id), post(fields) }
+// window.KimayaGuestbook: { API, list(), photoURL(id), clipURL(id), post(fields), postMany(fields) }
 //   post({ name, message, photo, clip?, takenOn?, song? })  song: { title, artist, itunesId? } (optional)
+//   postMany({ name, message, items: [{ photo, clip?, takenOn?, message? }], onProgress? })
+//     several at once in one request (one verification, one turn of the per-ip limit); an item's own
+//     message replaces the shared one. resolves { ok, status, count }
 
 (() => {
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -51,23 +54,60 @@
     });
   }
 
+  function fill(form, { photo, clip, takenOn }, s = "") {
+    form.append(`photo${s}`, photo, "shot.jpg");
+    if (clip) form.append(`clip${s}`, clip, clip.type.includes("mp4") ? "clip.mp4" : "clip.webm");
+    if (takenOn) form.append(`taken_on${s}`, takenOn);
+  }
+
+  async function send(form) {
+    form.append("token", await token());
+    const r = await fetch(`${API}/posts`, { method: "POST", body: form });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(data.error || "could not send"), { status: r.status });
+    return data;
+  }
+
   async function post({ name, message, photo, clip, takenOn, song }) {
     const form = new FormData();
     form.append("name", name);
     form.append("message", message);
-    form.append("photo", photo, "shot.jpg");
-    if (clip) form.append("clip", clip, clip.type.includes("mp4") ? "clip.mp4" : "clip.webm");
-    if (takenOn) form.append("taken_on", takenOn);
+    fill(form, { photo, clip, takenOn });
     if (song && song.title) {
       form.append("song_title", song.title);
       form.append("song_artist", song.artist || "");
       if (song.itunesId) form.append("song_itunes", song.itunesId);
     }
-    form.append("token", await token());
-    const r = await fetch(`${API}/posts`, { method: "POST", body: form });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || "could not send");
-    return data;
+    return send(form);
+  }
+
+  async function postMany({ name, message, items, onProgress }) {
+    if (!items || !items.length) throw new Error("nothing to send");
+    if (items.length === 1) return post({ ...items[0], name, message: items[0].message || message });
+    const form = new FormData();
+    form.append("name", name);
+    form.append("message", message);
+    items.forEach((it, i) => {
+      fill(form, it, `.${i}`);
+      if (it.message) form.append(`message.${i}`, it.message);
+    });
+    try {
+      return await send(form);
+    } catch (err) {
+      // a guestbook from before drops answers "photo required": send them one at a time instead
+      if (err.status !== 400 || !/photo required/.test(err.message)) throw err;
+    }
+    let n = 0;
+    for (const it of items) {
+      if (onProgress) onProgress(n, items.length);
+      try {
+        await post({ ...it, name, message: it.message || message });
+      } catch (err) {
+        throw new Error(n ? `${err.message} (${n} of ${items.length} went through)` : err.message);
+      }
+      n++;
+    }
+    return { ok: true, status: "pending", count: n };
   }
 
   async function list() {
@@ -80,6 +120,7 @@
     API,
     list,
     post,
+    postMany,
     loadTurnstile,
     photoURL: (id) => `${API}/photo/${encodeURIComponent(id)}`,
     clipURL: (id) => `${API}/clip/${encodeURIComponent(id)}`,

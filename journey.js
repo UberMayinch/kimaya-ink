@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=33";
-import { createInput } from "./experience/input.js?v=33";
-import { createPortrait } from "./experience/portrait.js?v=33";
-import { createCameraWorld } from "./experience/camera-world.js?v=33";
-import { createArchive } from "./experience/archive.js?v=33";
-import { createPost } from "./experience/post.js?v=33";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=33";
+import { createController, stateAt, R } from "./experience/controller.js?v=34";
+import { createInput } from "./experience/input.js?v=34";
+import { createPortrait } from "./experience/portrait.js?v=34";
+import { createCameraWorld } from "./experience/camera-world.js?v=34";
+import { createArchive } from "./experience/archive.js?v=34";
+import { createPost } from "./experience/post.js?v=34";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=34";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -33,7 +33,7 @@ try {
   const [photoImg, depthImg, stickerImg] = await Promise.all([
     loadImage("assets/kimaya.jpg"),
     loadImage("assets/kimaya-depth.png?v=2"),
-    loadImage("assets/sticker.png"),
+    loadIcon(),
   ]);
   await Promise.race([
     Promise.all([document.fonts.load('30px "VT323"'), document.fonts.load('italic 26px "Instrument Serif"'), document.fonts.load('600 40px "Caveat"')]).catch(() => {}),
@@ -47,6 +47,22 @@ try {
 } catch (err) {
   console.warn("[journey] falling back to the still:", err);
   journey.classList.add("dead");
+}
+
+// the sticker on the camera is the page's own icon (the svg in <link rel="icon">), rasterised square;
+// the old drawn sticker stays as the fallback
+async function loadIcon() {
+  try {
+    const href = document.querySelector('link[rel="icon"]')?.href;
+    if (!href) throw new Error("no icon");
+    const img = await loadImage(href);
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    c.getContext("2d").drawImage(img, 0, 0, 256, 256);
+    return c;
+  } catch {
+    return loadImage("assets/sticker.png");
+  }
 }
 
 function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
@@ -172,12 +188,14 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     return f;
   }
 
-  // the archive: the whole back face-on (its buttons in reach), or on a tall screen just the LCD
+  // the archive: the whole back face-on (its buttons in reach), or on a tall screen just the LCD,
+  // which rises while the note form is open underneath it (lift: 0..1, eased in the loop)
+  let lift = 0;
   function lcdPose() {
     const lcdW = world.lcdWorld(V3());
     if (aspect < 1) {
-      lcdLook.copy(lcdW);
-      lcdPos.copy(lcdW).add(V3(0, 0, -fit(1.92 * 1.06, 1.44 * 1.06)));
+      lcdLook.copy(lcdW).setY(lcdW.y - 0.7 * lift);
+      lcdPos.copy(lcdLook).add(V3(0, 0, -fit(1.92 * 1.06, 1.44 * 1.06)));
     } else {
       lcdLook.copy(CAM).setY(0.04);
       lcdPos.copy(lcdLook).add(V3(0, 0, -fit(world.size.CW * 1.08, world.size.CH * 1.12)));
@@ -562,7 +580,10 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
 
     const { moving, dp } = ctrl.tick(dt, now);
     if (ctrl.C.wrapped) { orbitP.yaw = orbitP.pitch = orbitC.yaw = orbitC.pitch = 0; parallax.x = parallax.y = 0; }
-    const blending = archive.tick(dt);
+    let blending = archive.tick(dt);
+    const liftTo = aspect < 1 && archive.isOpen() && (archive.rec.mode === "review" || archive.rec.mode === "sending") ? 1 : 0;
+    if (Math.abs(lift - liftTo) > 1e-3) { lift = calm ? liftTo : lift + (liftTo - lift) * (1 - Math.exp(-dt * 6)); blending = true; }
+    else lift = liftTo;
     lastP = ctrl.p;
     landWish();
 

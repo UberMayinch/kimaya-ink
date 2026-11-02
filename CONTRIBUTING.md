@@ -104,9 +104,10 @@ songs.css       song chip look
 dev/            test pages, e.g. dev/songs-demo.html
 journey.js      the hero: her photograph -> her eye -> the camera -> its LCD (gallery + booth) -> its lens -> the photograph
 experience/     the hero's parts: portrait (2.5D photo), camera-world (the digicam), archive (the LCD), archive-data (what's on the card), post (optics), input
-assets/         kimaya.jpg (the photograph), kimaya-depth.png (its depth + layer map), sticker.png
+assets/         kimaya.jpg (the photograph), kimaya-depth.png (its depth + layer map), sticker.png (fallback; the camera wears the page icon)
 guestbook-api.js  posting/listing for the guestbook (shared)
 uploads.js      prepares uploaded photos/videos (resize, strip metadata, stamp)
+drop.js         the share sheet: several photos/videos at once (window event kimaya:drop)
 photos.json     list of photos
 photos/         the images
 CNAME           custom domain
@@ -153,9 +154,13 @@ Besides the camera, the booth has **⇪ UPLOAD** for an existing photo or short 
 - photos (jpeg, png, webp, heic where the browser can decode it): turned upright, shrunk to 1280px on the long edge, stamped with the date and re-encoded as a JPEG under 200KB. The date comes from the EXIF "date taken", or today if there isn't one; on the admin page you can change it per photo.
 - videos: the first 8 seconds are re-recorded at 320x240, 15fps, with their sound (routed through Web Audio, so still nothing of the original file is sent), plus a 640x480 still for the poster. Each clip stays under 800KB. The booth's own video mode records 8 seconds from the camera and the mic (if the mic is refused, the video is silent).
 
+### several at once (the drop)
+
+Visitors can share up to 12 photos and videos in one go from **⇪ SHARE PHOTOS & VIDEOS** on the black below the hero, from **⇪ SHARE PHOTOS** in the fallback guestbook, or by picking more than one file behind the camera's **⇪ FROM MY PHONE**. That's `drop.js`: one name and one note for all of them (each can carry its own caption instead), prepared by `uploads.js` one after another (a video plays through once to make its clip), then sent together with `KimayaGuestbook.postMany` as one `POST /api/posts` with indexed fields (`photo.0`, `clip.0`, `taken_on.0`, `message.0`, …), one Turnstile check, all inserted or none. They queue for approval like any post. The per-ip limit counts posts, 30 an hour, so a drop of 12 and a couple of selfies fit. Against a worker from before drops the client falls back to posting them one at a time.
+
 ### songs on posts
 
-The booth's note form (and the admin uploader) has an optional song title + artist. It is stored on the post and shown as the same `♪` chip as a `song` in `photos.json`: the site looks the 30-second preview up on Apple when the chip is pressed, nothing is hosted here.
+The booth's note form (and the admin uploader) has an optional song title + artist. It is stored on the post and shown as a `♪` chip on the fallback page's prints (the site looks the 30-second preview up on Apple when the chip is pressed, nothing is hosted here). Inside the camera there is no chip: the song's name is written on the LCD, and looking at a memory makes its song the page's song (`KimayaSound.setSong`), crossfading the bed from Pink + White. It stays that way until the next memory with a song.
 
 ### editing
 

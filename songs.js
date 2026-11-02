@@ -228,8 +228,9 @@
   }
 
   // the song under a clip's own sound: quieter, and looping while the clip loops
-  const UNDER = 0.35;
+  const UNDER = 0.2;
   let under = false;
+  let bedUnder = false; // the page's soundtrack is carrying the song instead of this player
   function fullVoice(a) {
     if (!under) return;
     under = false;
@@ -270,10 +271,20 @@
   let underSeq = 0;
   function accompany(song, on) {
     underSeq++; // a stop while the lookup is still out cancels that start
+    const bed = window.KimayaSound;
+    const bedOn = !!(bed && bed.isOn && bed.isOn() && bed.setSong);
     if (!on) {
+      if (bedUnder) { bedUnder = false; if (bed) bed.duck(false); }
       if (!under) return Promise.resolve();
       fullVoice(audio);
       pause();
+      return Promise.resolve();
+    }
+    // with the page's own soundtrack on, that bed becomes the song and steps back: one music source, not two
+    if (bedOn) {
+      bed.setSong(song);
+      bed.duck(true, 0.25);
+      bedUnder = true;
       return Promise.resolve();
     }
     const my = underSeq;

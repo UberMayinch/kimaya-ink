@@ -6,7 +6,8 @@
  *   1. a buffer you load(url) yourself (a properly licensed file)
  *   2. the 30 s Apple Music preview of "Pink + White" (Frank Ocean), streamed
  *      from Apple's CDN (CORS: access-control-allow-origin: *), looped with
- *      equal-power crossfades. Never downloaded/hosted by us.
+ *      equal-power crossfades. Never downloaded/hosted by us. A memory with its
+ *      own song takes the bed over (setSong, via songs.js), and keeps it.
  *   3. a procedural lo-fi pad (fallback: offline, lookup failed, preview error)
  * Everything runs through one chain:
  *   source -> tape saturation -> warmth shelf -> lowpass -> air shelf -> wow/flutter
@@ -876,6 +877,7 @@
   };
 
   SongLoop.prototype.play = function (url, onPlaying, onFail) {
+    if (this.playing && this.wantPlay && this.url && this.url !== url) return this.swap(url, onPlaying, onFail);
     const a = this.els[this.cur];
     const firstTime = this.url !== url;
     this.url = url;
@@ -891,6 +893,42 @@
     a.onerror = () => { clearTimeout(fail); onFail(); };
     const p = a.play();
     if (p && p.catch) p.catch(() => { clearTimeout(fail); onFail(); });
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.tick(), 150);
+  };
+
+  // another preview takes over mid-play: it comes up on the spare element while this one goes down
+  SongLoop.prototype.swap = function (url, onPlaying, onFail) {
+    const ctx = this.eng.ctx;
+    const was = this.cur, nxt = 1 - was;
+    const a = this.els[was], b = this.els[nxt];
+    this.run = (this.run || 0) + 1; // a loop crossfade in flight is off
+    this.fading = false;
+    this.url = url;
+    this.wantPlay = true;
+    b.pause();
+    b.src = url;
+    b.playbackRate = a.playbackRate;
+    const mine = () => this.url === url && this.wantPlay;
+    const fail = setTimeout(() => { if (mine() && b.paused) onFail(); }, opts.fallbackAfter);
+    b.onplaying = () => {
+      clearTimeout(fail);
+      if (!mine()) return;
+      this.cur = nxt;
+      retarget(this.gains[was].gain, 0, ctx, 0.7);
+      retarget(this.gains[nxt].gain, 1, ctx, 0.7);
+      const run = this.run;
+      setTimeout(() => {
+        if (run !== this.run) return;
+        a.pause();
+        a.src = url; // so the loop's next crossfade continues the same song
+      }, 2600);
+      this.playing = true;
+      onPlaying();
+    };
+    b.onerror = () => { clearTimeout(fail); if (mine()) onFail(); };
+    const p = b.play();
+    if (p && p.catch) p.catch(() => { clearTimeout(fail); if (mine()) onFail(); });
     clearInterval(this.timer);
     this.timer = setInterval(() => this.tick(), 150);
   };
@@ -960,7 +998,9 @@
   let ctx = null;
   let eng = null;
   let song = null;
-  let songMeta = null;
+  let songMeta = null; // { previewUrl, trackViewUrl, title, artist } of the bed that plays
+  let chosen = null; // a memory's song { title, artist, itunesId? }; null is Pink + White
+  let chooseSeq = 0;
   let buffer = null; // load(url)
   let bufNode = null;
   let running = false;
@@ -1018,11 +1058,32 @@
     eng.setSource("buffer");
   }
 
+  // the preview to loop: Pink + White, or the memory's song through songs.js's lookup (cached there)
+  function findSong(pick) {
+    if (!pick) return lookupSong().then((m) => ({ previewUrl: m.previewUrl, trackViewUrl: m.trackViewUrl || SONG.trackViewUrl, title: SONG.title, artist: SONG.artist }));
+    if (!window.KimayaSongs || !window.KimayaSongs.resolve) return Promise.reject(new Error("no songs.js"));
+    return window.KimayaSongs.resolve(pick).then((r) => {
+      if (!r || !r.previewUrl) throw new Error("no preview");
+      return { previewUrl: r.previewUrl, trackViewUrl: r.trackUrl || r.trackViewUrl || "", title: r.title || pick.title, artist: r.artist || pick.artist || "" };
+    });
+  }
+
   function startSong() {
     if (!song) song = new SongLoop(eng);
+    const pick = chosen, seq = chooseSeq;
     if (songState !== "playing") songState = "loading";
     emit();
     const fail = () => {
+      if (seq !== chooseSeq) return; // a newer choice is on its way
+      if (pick) {
+        // a memory's song that won't play: back to Pink + White rather than silence
+        chosen = null;
+        songMeta = null;
+        chooseSeq++;
+        if (running && want === "song" && !buffer) startSong();
+        else emit();
+        return;
+      }
       if (songState === "failed" || !running) return;
       songState = "failed";
       song.pause();
@@ -1031,9 +1092,11 @@
       emit();
     };
     const go = (meta) => {
+      if (seq !== chooseSeq) return;
       songMeta = meta;
       if (!running || want !== "song" || buffer) return;
       song.play(meta.previewUrl, () => {
+        if (seq !== chooseSeq) return;
         songState = "playing";
         if (running && want === "song" && !buffer) {
           stopSynth();
@@ -1042,8 +1105,8 @@
         emit();
       }, fail);
     };
-    if (songMeta) go(songMeta);
-    else lookupSong().then(go).catch(fail);
+    if (songMeta && songMeta.previewUrl) go(songMeta);
+    else findSong(pick).then(go).catch(fail);
   }
 
   function pickSource() {
@@ -1149,13 +1212,36 @@
       const now = ctx.currentTime;
       if (lastCue[name] !== undefined && now - lastCue[name] < (CUE_GAP[name] || 0.2)) return false;
       lastCue[name] = now;
-      return eng.cue(name, now + 0.005, reducedMotion() ? 0.5 : 1);
+      // ducked means something else is talking (a clip, a song): the camera's clicks step back with the bed
+      return eng.cue(name, now + 0.005, (reducedMotion() ? 0.5 : 1) * (ducked ? 0.4 : 1));
     },
 
-    duck(on) {
+    // to: optional bed level while ducked (default opts.duckTo)
+    duck(on, to) {
       ducked = !!on;
-      if (eng) eng.duckG.gain.setTargetAtTime(ducked ? opts.duckTo : 1, ctx.currentTime, ducked ? 0.25 : 0.6);
+      const level = ducked ? (typeof to === "number" ? clamp(to, 0, 1) : opts.duckTo) : 1;
+      if (eng) eng.duckG.gain.setTargetAtTime(level, ctx.currentTime, ducked ? 0.25 : 0.6);
     },
+
+    // a memory's song { title, artist, itunesId? } becomes the page's song, and stays until the next one.
+    // null goes back to Pink + White. with sound off it only changes what the credit says, for when it comes on.
+    setSong(s) {
+      const next = s && (s.itunesId || (s.title && s.artist)) ? { title: String(s.title || ""), artist: String(s.artist || ""), itunesId: s.itunesId } : null;
+      const same = (a, b) => (!a && !b) || (!!a && !!b && (a.itunesId && b.itunesId ? a.itunesId === b.itunesId : a.title === b.title && a.artist === b.artist));
+      if (same(next, chosen)) return false;
+      chosen = next;
+      const seq = ++chooseSeq;
+      songMeta = null;
+      if (songState === "failed") songState = "idle";
+      if (running && want === "song" && !buffer) startSong();
+      else {
+        emit();
+        // not playing yet: still look it up, so the credit links to the track and the start is instant
+        findSong(next).then((m) => { if (seq === chooseSeq && !songMeta) { songMeta = m; emit(); } }).catch(() => {});
+      }
+      return true;
+    },
+    currentSong: () => (chosen ? { ...chosen } : { title: SONG.title, artist: SONG.artist, itunesId: SONG.id }),
 
     // swap in a real (licensed) audio file: decoded, looped, same chain
     async load(url) {
@@ -1207,7 +1293,11 @@
         source: eng ? eng.source : null,
         song: songState,
         songPlaying: running && !muted && songState === "playing" && eng && eng.source === "song",
-        credit: { title: SONG.title, artist: SONG.artist, url: (songMeta && songMeta.trackViewUrl) || SONG.trackViewUrl },
+        credit: {
+          title: (songMeta && songMeta.title) || (chosen ? chosen.title : SONG.title),
+          artist: (songMeta && songMeta.artist) || (chosen ? chosen.artist : SONG.artist),
+          url: (songMeta && songMeta.trackViewUrl) || (chosen ? "" : SONG.trackViewUrl),
+        },
         progress: prog,
       };
     },
@@ -1286,8 +1376,8 @@
         btn.classList.toggle("is-loading", s.on && s.song === "loading");
         if (credit) {
           credit.hidden = !s.songPlaying;
-          credit.href = s.credit.url;
-          credit.textContent = `♪ ${s.credit.title} — ${s.credit.artist}`;
+          if (s.credit.url) credit.href = s.credit.url; else credit.removeAttribute("href");
+          credit.textContent = `♪ ${s.credit.title}${s.credit.artist ? ` — ${s.credit.artist}` : ""}`;
         }
       };
       window.addEventListener("kimaya:sound", paint);

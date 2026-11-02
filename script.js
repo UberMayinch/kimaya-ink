@@ -107,11 +107,11 @@ document.addEventListener("keydown", (e) => {
 
 $("today").textContent = stamp();
 
-// 3D hero lives in camera.js; if it never comes up, fall back to the flat title
+// 3D journey lives in journey.js; if it never comes up, show the still
 setTimeout(() => {
-  const stage = $("stage");
-  if (stage && !stage.classList.contains("live")) stage.classList.add("dead");
-}, 8000);
+  const j = $("journey");
+  if (j && !j.classList.contains("live")) j.classList.add("dead");
+}, 10000);
 
 fetch("photos.json", { cache: "no-cache" })
   .then((r) => r.json())

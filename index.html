@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
   <script type="importmap">
     {
       "imports": {
@@ -23,6 +23,19 @@
 <body>
   <div class="grain" aria-hidden="true"></div>
   <div class="flash" aria-hidden="true"></div>
+
+  <section class="journey" id="journey" aria-label="kimaya, through the lens">
+    <div class="journey-pin">
+      <img class="journey-still" src="assets/kimaya.jpg" alt="kimaya">
+      <div class="j-hud" aria-hidden="true">
+        <span class="j-rec">&#9679; REC</span>
+        <span class="j-focus"><i></i><i></i><i></i><i></i></span>
+        <span class="j-zoom">W <b><i></i></b> T</span>
+        <span class="j-date stamp">'23 10 29</span>
+        <span class="j-hint">SCROLL &#9660;</span>
+      </div>
+    </div>
+  </section>
 
   <main class="lcd">
     <!-- viewfinder corners -->
@@ -38,9 +51,6 @@
     </header>
 
     <section class="hero">
-      <div class="stage" id="stage" title="click to take a picture">
-        <span class="stage-msg">FOCUSING&hellip;</span>
-      </div>
       <h1 class="title" data-text="kimaya">kimaya</h1>
       <p class="sub">a little memory card, always full</p>
     </section>
@@ -121,8 +131,8 @@
   </div>
   <div class="booth-white" id="b-white" aria-hidden="true"></div>
 
-  <script src="script.js?v=3"></script>
+  <script src="script.js?v=4"></script>
   <script src="booth.js?v=4"></script>
-  <script type="module" src="camera.js?v=4"></script>
+  <script type="module" src="journey.js?v=9"></script>
 </body>
 </html>

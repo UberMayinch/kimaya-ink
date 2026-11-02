@@ -729,6 +729,20 @@ body:has(.journey.live):not(.j-released) { overflow: hidden; }
 .j-wishbtn:hover, .j-wishbtn:focus-visible { background: rgba(255, 74, 61, .22); }
 .journey.below .j-wishbtn { display: block; }
 .journey.focused .j-wishbtn { display: none; }
+/* the footer of the black */
+.j-made {
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 48px);
+  text-align: center;
+  color: var(--dim);
+  font-size: clamp(15px, 1.8vw, 19px);
+  letter-spacing: .1em;
+  opacity: var(--fade, 0);
+}
+@media (max-width: 640px) { .j-made { bottom: 56px; } }
+.hud-bottom .made { color: var(--dim); letter-spacing: .1em; text-align: center; }
 .journey.below .j-focus { display: none; }
 
 .j-focus { left: 50%; top: 50%; width: 90px; height: 64px; transform: translate(-50%, -50%); }

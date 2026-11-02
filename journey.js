@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=29";
-import { createInput } from "./experience/input.js?v=29";
-import { createPortrait } from "./experience/portrait.js?v=29";
-import { createCameraWorld } from "./experience/camera-world.js?v=29";
-import { createArchive } from "./experience/archive.js?v=29";
-import { createPost } from "./experience/post.js?v=29";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=29";
+import { createController, stateAt, R } from "./experience/controller.js?v=30";
+import { createInput } from "./experience/input.js?v=30";
+import { createPortrait } from "./experience/portrait.js?v=30";
+import { createCameraWorld } from "./experience/camera-world.js?v=30";
+import { createArchive } from "./experience/archive.js?v=30";
+import { createPost } from "./experience/post.js?v=30";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=30";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -254,6 +254,22 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     release();
     scrollTo({ top: innerHeight, behavior: calm ? "auto" : "smooth" });
   });
+  // "record a wish" on the black: back up, dive into the camera, land on the leave-a-memory screen
+  let wishPending = false;
+  journey.querySelector(".j-wishbtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (archive.isOpen() || pinned !== null) return;
+    scrollTo({ top: 0, behavior: calm ? "auto" : "smooth" });
+    wishPending = true;
+    ctrl.activate();
+    window.KimayaSound?.cue("charge");
+  });
+  function landWish() {
+    if (!wishPending || ctrl.flying || !inCameraWorld() || archive.isOpen()) return;
+    wishPending = false;
+    archive.open();
+    archive.onAction("shutter");
+  }
 
   const input = createInput(pin, {
     passWheel(dy) {
@@ -263,6 +279,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     },
     onNudge(dp, src) {
       if (archive.isOpen() || pinned !== null || below()) return;
+      wishPending = false;
       ctrl.nudge(dp * (src === "pinch" ? 1.2 : 1) * (calm ? 0.6 : 1));
       velSrc = src;
       dirty = true;
@@ -548,6 +565,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     if (ctrl.C.wrapped) { orbitP.yaw = orbitP.pitch = orbitC.yaw = orbitC.pitch = 0; parallax.x = parallax.y = 0; release(); }
     const blending = archive.tick(dt);
     lastP = ctrl.p;
+    landWish();
 
     // the LCD slideshows by itself while you're just looking at the camera
     if (!calm) archive.autoFlip(now);

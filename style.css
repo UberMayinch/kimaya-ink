@@ -708,9 +708,27 @@ body:has(.journey.live):not(.j-released) { overflow: hidden; }
   text-shadow: 0 0 30px rgba(255, 220, 180, .35), 0 0 6px rgba(0, 0, 0, .6);
   opacity: var(--fade, 0);
 }
-.journey.below .j-rec, .journey.below .j-zoom, .journey.below .j-date, .journey.below .j-down,
+.journey.below .j-rec, .journey.below .j-zoom, .journey.below .j-down,
 .journey.below .j-nav, .journey.below .j-cta { opacity: 0; pointer-events: none; }
-.j-rec, .j-zoom, .j-date, .j-nav { transition: opacity .3s linear; }
+.j-rec, .j-zoom, .j-nav { transition: opacity .3s linear; }
+/* the date stays on the black; so does the way to leave a wish */
+.j-wishbtn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  pointer-events: auto;
+  white-space: nowrap;
+  background: rgba(10, 12, 12, .55);
+  color: #ff8a80;
+  border-color: rgba(255, 74, 61, .5);
+  text-shadow: 0 0 6px rgba(255, 74, 61, .45);
+  opacity: var(--fade, 0);
+}
+.j-wishbtn:hover, .j-wishbtn:focus-visible { background: rgba(255, 74, 61, .22); }
+.journey.below .j-wishbtn { display: block; }
+.journey.focused .j-wishbtn { display: none; }
 .journey.below .j-focus { display: none; }
 
 .j-focus { left: 50%; top: 50%; width: 90px; height: 64px; transform: translate(-50%, -50%); }

@@ -5,7 +5,7 @@
 //
 // scene colour comes in linear (half-float render targets) and leaves display-encoded.
 
-import { GLSL_NOISE } from "./util.js?v=29";
+import { GLSL_NOISE } from "./util.js?v=30";
 
 export function createPost(THREE, { tPortrait, tCamera, tPhoto }) {
   const uniforms = {

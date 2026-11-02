@@ -90,10 +90,12 @@
     $("b-err").textContent = "";
     dropClip();
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
-        audio: false,
-      });
+      const wantVideo = { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } };
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: wantVideo, audio: true });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: wantVideo, audio: false }); // no mic: silent movies
+      }
       video.srcObject = stream;
       await video.play();
       state("live");
@@ -251,6 +253,9 @@
 
   // ---------- send ----------
 
+  // the song box: searches apple as you type, so the exact track gets saved
+  const songPick = $("b-song") && window.KimayaSongs ? KimayaSongs.picker($("b-song")) : null;
+
   async function send(e) {
     e.preventDefault();
     const name = $("b-name").value.trim();
@@ -267,6 +272,12 @@
       form.append("photo", blob, "shot.jpg");
       if (clip) form.append("clip", clip, clip.type.includes("mp4") ? "clip.mp4" : "clip.webm");
       if (takenOn) form.append("taken_on", takenOn);
+      const song = songPick ? songPick.value() : null;
+      if (song) {
+        form.append("song_title", song.title);
+        form.append("song_artist", song.artist || "");
+        if (song.itunesId) form.append("song_itunes", song.itunesId);
+      }
       form.append("token", await token());
       const r = await fetch(`${API}/posts`, { method: "POST", body: form });
       const data = await r.json().catch(() => ({}));
@@ -274,6 +285,7 @@
       state("sent");
       $("b-name").value = "";
       $("b-msg").value = "";
+      if (songPick) songPick.reset();
       $("b-left").textContent = "140";
     } catch (err) {
       $("b-err").textContent = `${err.message}.`;
@@ -329,6 +341,7 @@
           by.append(d);
         }
         if (by.childNodes.length) cap.append(by);
+        if (p.song && p.song.title && window.KimayaSongs) cap.append(window.KimayaSongs.chip(p.song));
         fig.append(frame, cap);
         el.append(fig);
       });

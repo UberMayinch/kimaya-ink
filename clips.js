@@ -2,8 +2,8 @@
 //
 //   KimayaClips.supported()                 -> bool
 //   KimayaClips.type()                      -> mime type record() will use, or ""
-//   KimayaClips.record(stream, opts)        -> Promise<Blob>  (video/mp4 or video/webm)
-//     opts: seconds=3 width=320 height=240 fps=15 bitrate=300000 maxBytes=700KB
+//   KimayaClips.record(stream, opts)        -> Promise<Blob>  (video/mp4 or video/webm, with sound if the stream has a mic track)
+//     opts: seconds=8 width=320 height=240 fps=15 bitrate=280000 audioBitrate=48000 maxBytes=700KB
 //           video    an already-playing <video> showing the stream (reused, safer on iOS)
 //           mirror   default true, flip like a selfie preview
 //           signal   AbortSignal, stops early and rejects
@@ -11,7 +11,8 @@
 //   KimayaClips.player(src, { poster })     -> <video> for prints, muted + looping
 
 (() => {
-  const TYPES = ["video/mp4;codecs=avc1", "video/webm;codecs=vp8", "video/webm"];
+  // types that carry sound first; the bare ones still take an audio track where the browser allows
+  const TYPES = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4;codecs=avc1", "video/webm;codecs=vp8,opus", "video/webm;codecs=vp8", "video/webm"];
   const MAX_BYTES = 700 * 1024;
 
   const pad = (n) => String(n).padStart(2, "0");
@@ -82,7 +83,7 @@
     g.font = `${px}px "VT323", monospace`;
     g.textBaseline = "alphabetic";
 
-    // blinking red rec, half a second on, half off
+    // blinking red rec with the seconds, half a second on, half off
     if (Math.floor(t * 2) % 2 === 0) {
       g.fillStyle = "#ff2a2a";
       g.shadowColor = "rgba(255, 0, 0, .8)";
@@ -91,7 +92,7 @@
       g.arc(px * 0.9, px * 1.05, px * 0.32, 0, Math.PI * 2);
       g.fill();
       g.textAlign = "left";
-      g.fillText("REC", px * 1.5, px * 1.4);
+      g.fillText(`REC ${pad(Math.floor(t))}`, px * 1.5, px * 1.4);
     }
 
     // orange date stamp
@@ -105,8 +106,8 @@
 
   async function record(stream, opts = {}) {
     const o = {
-      seconds: 3, width: 320, height: 240, fps: 15,
-      bitrate: 300000, maxBytes: MAX_BYTES, mirror: true,
+      seconds: 8, width: 320, height: 240, fps: 15,
+      bitrate: 280000, audioBitrate: 48000, maxBytes: MAX_BYTES, mirror: true,
       ...opts,
     };
     const mime = type();
@@ -127,7 +128,10 @@
     if (o.onstart) o.onstart(c);
 
     const out = c.captureStream();
-    const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: o.bitrate });
+    // the mic rides along with the drawn frames
+    const mic = o.audio === false ? null : stream.getAudioTracks()[0];
+    if (mic) out.addTrack(mic);
+    const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: o.bitrate, audioBitsPerSecond: o.audioBitrate });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
 
@@ -157,7 +161,7 @@
     } finally {
       clearInterval(tick);
       if (o.signal) o.signal.removeEventListener("abort", onAbort);
-      out.getTracks().forEach((t) => t.stop()); // only our canvas track, never the camera
+      out.getVideoTracks().forEach((t) => t.stop()); // only our canvas track, never the camera or the mic
       if (!o.video) v.srcObject = null;
     }
     if (aborted) throw new Error("stopped");
@@ -182,6 +186,21 @@
     v.disablePictureInPicture = true;
     if (opts.poster) v.poster = opts.poster;
     if (src) v.src = src;
+    // a tap turns the sound on (and off again); anything else that starts playing sound mutes it
+    v.title = "tap for sound";
+    v.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (v.muted) {
+        // claim first (that mutes every other clip, including this one), then turn this one on
+        window.dispatchEvent(new CustomEvent("kimaya:audio-claim", { detail: "clip" }));
+        v.muted = false;
+        v.currentTime = 0;
+        v.play().catch(() => {});
+      } else {
+        v.muted = true;
+      }
+    });
+    window.addEventListener("kimaya:audio-claim", () => { v.muted = true; });
 
     // only spend cpu on clips that are on screen
     if ("IntersectionObserver" in window) {

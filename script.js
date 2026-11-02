@@ -33,6 +33,7 @@ function flash() {
 }
 
 let photos = [];
+let viewable = [];
 let current = 0;
 let vClip = null; // viewer's movie player, made on first use
 
@@ -54,10 +55,14 @@ function render() {
   }
 
   photos.forEach((p, i) => {
+    // letters and voice notes (see CONTRIBUTING.md) print as paper too, without the viewer
+    if (p.type === "letter" || p.type === "audio") return roll.append(paperNote(p, i));
+
+    const n = viewable.indexOf(p);
     const btn = document.createElement("button");
     btn.className = "shot";
     btn.style.setProperty("--tilt", `${((i * 37) % 7) - 3}deg`);
-    btn.setAttribute("aria-label", p.caption || dscName(i));
+    btn.setAttribute("aria-label", p.caption || dscName(n));
 
     const frame = document.createElement("div");
     frame.className = "frame";
@@ -72,23 +77,57 @@ function render() {
 
     const label = document.createElement("span");
     label.className = "label";
-    label.textContent = p.caption || dscName(i);
+    label.textContent = p.caption || dscName(n);
 
     btn.append(frame, label);
-    btn.addEventListener("click", () => open(i));
+    btn.addEventListener("click", () => open(viewable.indexOf(p)));
     roll.append(withSong(btn, p.song));
   });
 }
 
+function paperNote(p, i) {
+  const fig = document.createElement("figure");
+  fig.className = "shot guest note";
+  fig.style.setProperty("--tilt", `${((i * 37) % 7) - 3}deg`);
+  const frame = document.createElement("div");
+  frame.className = "frame note-frame";
+  if (p.type === "letter") {
+    const txt = document.createElement("p");
+    txt.className = "note-text";
+    txt.textContent = p.text || "";
+    frame.append(txt);
+  } else {
+    const a = document.createElement("audio");
+    a.controls = true;
+    a.preload = "none";
+    a.src = p.file;
+    frame.append(a);
+  }
+  const s = document.createElement("span");
+  s.className = "stamp";
+  s.textContent = stamp(p.date);
+  frame.append(s);
+  const cap = document.createElement("figcaption");
+  cap.className = "label";
+  cap.textContent = p.title || p.caption || (p.type === "letter" ? "a letter" : "a voice note");
+  if (p.by) {
+    const by = document.createElement("small");
+    by.textContent = `— ${p.by}`;
+    cap.append(by);
+  }
+  fig.append(frame, cap);
+  return fig;
+}
+
 function show(i) {
-  current = (i + photos.length) % photos.length;
-  const p = photos[current];
+  current = (i + viewable.length) % viewable.length;
+  const p = viewable[current];
   $("v-img").src = p.file;
   $("v-img").alt = p.caption || "";
   showClip(hasClip(p) ? p : null);
   $("v-stamp").textContent = stamp(p.date);
   $("v-name").textContent = dscName(current);
-  $("v-pos").textContent = `${current + 1}/${photos.length}`;
+  $("v-pos").textContent = `${current + 1}/${viewable.length}`;
 
   const cap = $("v-cap");
   cap.textContent = p.caption || "";
@@ -160,6 +199,7 @@ fetch("photos.json", { cache: "no-cache" })
   .then((list) => {
     // newest first
     photos = list.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    viewable = photos.filter((p) => p.type !== "letter" && p.type !== "audio");
     render();
   })
   .catch(() => render());

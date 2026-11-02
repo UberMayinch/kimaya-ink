@@ -1,9 +1,11 @@
 // guestbook api client shared by the camera LCD and the fallback booth.
 // window.KimayaGuestbook: { API, list(), photoURL(id), clipURL(id), post(fields) }
+//   post({ name, message, photo, clip?, takenOn?, song? })  song: { title, artist, itunesId? } (optional)
 
 (() => {
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const API = LOCAL ? "http://localhost:8787/api" : "https://kimaya-guestbook.kimaya-ink.workers.dev/api";
+  // ?api=http://127.0.0.1:8788/api points a local page at another local worker (dev only)
+  const API = (LOCAL && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api$/.test(new URLSearchParams(location.search).get("api") || "") && new URLSearchParams(location.search).get("api")) || (LOCAL ? "http://localhost:8787/api" : "https://kimaya-guestbook.kimaya-ink.workers.dev/api");
   // localhost uses cloudflare's always-pass test key
   const SITEKEY = LOCAL ? "1x00000000000000000000AA" : "0x4AAAAAAFwc3Ol-4BaBxvkn";
 
@@ -49,13 +51,18 @@
     });
   }
 
-  async function post({ name, message, photo, clip, takenOn }) {
+  async function post({ name, message, photo, clip, takenOn, song }) {
     const form = new FormData();
     form.append("name", name);
     form.append("message", message);
     form.append("photo", photo, "shot.jpg");
     if (clip) form.append("clip", clip, clip.type.includes("mp4") ? "clip.mp4" : "clip.webm");
     if (takenOn) form.append("taken_on", takenOn);
+    if (song && song.title) {
+      form.append("song_title", song.title);
+      form.append("song_artist", song.artist || "");
+      if (song.itunesId) form.append("song_itunes", song.itunesId);
+    }
     form.append("token", await token());
     const r = await fetch(`${API}/posts`, { method: "POST", body: form });
     const data = await r.json().catch(() => ({}));

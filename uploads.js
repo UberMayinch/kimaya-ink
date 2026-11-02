@@ -15,8 +15,9 @@
   const MAX_CLIP = 790 * 1024; // server takes 800KB
   const MAX_IMAGE_IN = 60 * 1024 * 1024;
   const MAX_VIDEO_IN = 1024 * 1024 * 1024;
-  const CLIP_W = 320, CLIP_H = 240, CLIP_FPS = 15, CLIP_SECONDS = 5;
-  const CLIP_BPS = 450000; // ~280KB for 5s
+  const CLIP_W = 320, CLIP_H = 240, CLIP_FPS = 15, CLIP_SECONDS = 8;
+  const CLIP_BPS = 300000; // ~300KB for 8s, plus ~50KB of sound
+  const CLIP_ABPS = 48000;
   const POSTER_W = 640, POSTER_H = 480;
   const IMAGE_EXT = /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i;
   const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|3gp)$/i;
@@ -246,14 +247,38 @@
   }
 
   function clipType() {
-    // mp4 first: it plays everywhere, older iphones choke on webm
-    for (const t of ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp8", "video/webm"]) {
+    // mp4 first: it plays everywhere, older iphones choke on webm. sound-carrying types before bare ones.
+    for (const t of ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp8,opus", "video/webm;codecs=vp8", "video/webm"]) {
       if (MediaRecorder.isTypeSupported(t)) return t;
     }
     return "";
   }
 
-  // plays the source muted in real time and records a stamped 320x240 copy. no audio track.
+  // the source's sound, routed through web audio into a stream track (never to the speakers).
+  // one node per element: a second createMediaElementSource would throw.
+  const taps = new WeakMap();
+  function soundTrack(v) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      let tap = taps.get(v);
+      if (!tap) {
+        const ctx = new AC();
+        const dest = ctx.createMediaStreamDestination();
+        ctx.createMediaElementSource(v).connect(dest);
+        tap = { ctx, dest };
+        taps.set(v, tap);
+      }
+      if (tap.ctx.state === "suspended") tap.ctx.resume().catch(() => {});
+      v.muted = false; // the element now feeds the graph, not the speakers; muted would silence the tap
+      v.volume = 1;
+      return tap.dest.stream.getAudioTracks()[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // plays the source in real time and records a stamped 320x240 copy, sound included where the browser allows
   async function record(v, start, day, stamped, bps) {
     const c = canvas(CLIP_W, CLIP_H);
     // push frames by hand where we can, so the timer, not paint timing, sets the rate
@@ -263,8 +288,10 @@
       stream = c.captureStream(CLIP_FPS);
       track = null;
     }
+    const audio = soundTrack(v);
+    if (audio) stream.addTrack(audio);
     const type = clipType();
-    const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: bps } : { videoBitsPerSecond: bps });
+    const rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: bps, audioBitsPerSecond: CLIP_ABPS } : { videoBitsPerSecond: bps, audioBitsPerSecond: CLIP_ABPS });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     const stopped = new Promise((r) => { rec.onstop = r; });
@@ -297,7 +324,7 @@
     v.pause();
     rec.stop();
     await stopped;
-    stream.getTracks().forEach((t) => t.stop());
+    stream.getVideoTracks().forEach((t) => t.stop());
     return new Blob(chunks, { type: (rec.mimeType || type || "video/webm").split(";")[0] });
   }
 
@@ -326,7 +353,7 @@
       await loaded;
       if (!v.videoWidth || !v.videoHeight) throw fail("that video has no picture");
 
-      // recorded webms often say Infinity; then just take the first 5s
+      // recorded webms often say Infinity; then just take the first 8s
       const dur = Number.isFinite(v.duration) ? v.duration : 0;
       const start = Math.min(Math.max(0, Number(opts.start) || 0), Math.max(0, dur - 0.5));
       await seek(v, start);

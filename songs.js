@@ -1,5 +1,6 @@
 // a song on each photo: finds apple's 30s preview + one shared player + a chip ui
-// mount anywhere: el.append(KimayaSongs.chip({ title: "...", artist: "..." }))
+// mount anywhere: el.append(KimayaSongs.chip({ title: "...", artist: "...", itunesId? }))
+// pick one: const p = KimayaSongs.picker(host); p.value() -> { title, artist, itunesId? } | null
 // events on window:
 //   kimaya:song         detail { state: "playing" | "paused" | "ended", song }
 //   kimaya:audio-claim  dispatch this from anything else that wants the speakers; songs pause
@@ -360,6 +361,246 @@
     return wrap;
   }
 
-  const api = { resolve, play, pause, toggle, current, chip, transport: "fetch" };
+  // ---------- picker ----------
+  // one box that asks apple as you type. picking a row keeps the exact track id, so the
+  // chip later looks the song up by id instead of guessing from words. nothing picked:
+  // the words still go through, "song — artist" if they wrote it that way.
+
+  const searches = new Map(); // norm(term) -> promise of shaped results, for this page
+  function search(term) {
+    const k = norm(term);
+    if (!searches.has(k)) {
+      const p = limited(() => get("search", { term, entity: "song", media: "music", limit: 8 })).then((d) =>
+        (d.results || []).filter((r) => r.kind === "song" && r.previewUrl).slice(0, 6).map(shape)
+      );
+      p.catch(() => searches.delete(k)); // network trouble: ask again next time
+      searches.set(k, p);
+    }
+    return searches.get(k);
+  }
+
+  // "Song — Artist" / "Song - Artist" -> { title, artist }
+  function split(text) {
+    const m = /^(.*?)\s+[-–—]\s+(.*)$/.exec(text);
+    return m ? { title: m[1].trim(), artist: m[2].trim() } : { title: text, artist: "" };
+  }
+
+  const small = (url) => (url || "").replace("/600x600bb.", "/80x80bb.");
+
+  let pickers = 0;
+  function picker(host, o = {}) {
+    const id = `song-pick-${++pickers}`;
+    const wrap = document.createElement("div");
+    wrap.className = "song-pick";
+    wrap.dataset.state = "empty";
+
+    const box = document.createElement("div");
+    box.className = "song-pick-box";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = o.max || 140;
+    input.placeholder = o.placeholder || "♪ a song for it (optional)";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-controls", id);
+
+    const art = document.createElement("img");
+    art.className = "song-pick-art";
+    art.alt = "";
+    art.hidden = true;
+
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "song-pick-clear";
+    clear.textContent = "×";
+    clear.setAttribute("aria-label", "remove the song");
+    clear.hidden = true;
+
+    const tail = document.createElement("span");
+    tail.className = "song-pick-tail";
+    tail.append(art, clear);
+
+    const list = document.createElement("ul");
+    list.className = "song-pick-list";
+    list.id = id;
+    list.setAttribute("role", "listbox");
+    list.hidden = true;
+
+    const hint = document.createElement("small");
+    hint.className = "song-pick-hint";
+    hint.hidden = true;
+
+    box.append(input, tail);
+    wrap.append(box, list, hint);
+    if (host) host.append(wrap);
+
+    let picked = null; // { title, artist, itunesId, artworkUrl }
+    let rows = [];
+    let active = -1;
+    let timer = 0;
+    let seq = 0;
+
+    function say(text) {
+      hint.textContent = text || "";
+      hint.hidden = !text;
+    }
+
+    function close() {
+      list.hidden = true;
+      list.replaceChildren();
+      rows = [];
+      active = -1;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    }
+
+    function mark() {
+      [...list.children].forEach((li, i) => {
+        li.setAttribute("aria-selected", String(i === active));
+        if (i === active) {
+          input.setAttribute("aria-activedescendant", li.id);
+          li.scrollIntoView({ block: "nearest" });
+        }
+      });
+      if (active < 0) input.removeAttribute("aria-activedescendant");
+    }
+
+    function show(found) {
+      rows = found;
+      active = -1;
+      list.replaceChildren(
+        ...found.map((s, i) => {
+          const li = document.createElement("li");
+          li.id = `${id}-${i}`;
+          li.setAttribute("role", "option");
+          li.setAttribute("aria-selected", "false");
+          const img = document.createElement("img");
+          img.alt = "";
+          img.loading = "lazy";
+          img.src = small(s.artworkUrl);
+          const name = document.createElement("span");
+          name.className = "song-pick-name";
+          name.textContent = s.title;
+          const by = document.createElement("span");
+          by.className = "song-pick-by";
+          by.textContent = s.album && norm(s.album) !== norm(s.title) ? `${s.artist} · ${s.album}` : s.artist;
+          li.append(img, name, by);
+          // mousedown, not click: the input keeps focus, so no focusout closes the list first
+          li.addEventListener("mousedown", (e) => { e.preventDefault(); choose(s); });
+          li.addEventListener("mousemove", () => { if (active !== i) { active = i; mark(); } });
+          return li;
+        })
+      );
+      list.hidden = !found.length;
+      input.setAttribute("aria-expanded", String(!!found.length));
+    }
+
+    function choose(s) {
+      picked = { title: s.title, artist: s.artist, itunesId: s.trackId, artworkUrl: s.artworkUrl };
+      input.value = `${s.title} — ${s.artist}`;
+      art.src = small(s.artworkUrl);
+      art.hidden = !s.artworkUrl;
+      clear.hidden = false;
+      wrap.dataset.state = "picked";
+      say("");
+      close();
+      wrap.dispatchEvent(new CustomEvent("kimaya:song-pick", { detail: { song: value() }, bubbles: true }));
+    }
+
+    function unpick() {
+      picked = null;
+      art.hidden = true;
+      art.removeAttribute("src");
+      wrap.dataset.state = input.value.trim() ? "typed" : "empty";
+      clear.hidden = !input.value.trim();
+    }
+
+    function ask() {
+      const term = input.value.trim();
+      const my = ++seq;
+      if (term.length < 2) { close(); say(""); wrap.dataset.state = term ? "typed" : "empty"; return; }
+      wrap.dataset.state = "searching";
+      search(term).then(
+        (found) => {
+          if (my !== seq) return;
+          show(found);
+          wrap.dataset.state = found.length ? "open" : "typed";
+          say(found.length ? "" : "not on apple music. the words stay as written: song — artist");
+        },
+        () => {
+          if (my !== seq) return;
+          close();
+          wrap.dataset.state = "typed";
+          say("apple isn't answering. the words stay as written: song — artist");
+        }
+      );
+    }
+
+    input.addEventListener("input", () => {
+      if (picked) unpick();
+      else clear.hidden = !input.value.trim();
+      clearTimeout(timer);
+      timer = setTimeout(ask, 350);
+    });
+    input.addEventListener("focus", () => { if (!picked && input.value.trim().length >= 2 && !rows.length) ask(); });
+    input.addEventListener("keydown", (e) => {
+      if (list.hidden) {
+        if (e.key === "ArrowDown" && !picked && input.value.trim().length >= 2) { e.preventDefault(); ask(); }
+        return;
+      }
+      if (e.key === "ArrowDown") { e.preventDefault(); active = (active + 1) % rows.length; mark(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); active = (active - 1 + rows.length) % rows.length; mark(); }
+      else if (e.key === "Enter") { e.preventDefault(); choose(rows[active < 0 ? 0 : active]); }
+      else if (e.key === "Escape") { e.preventDefault(); close(); }
+    });
+    wrap.addEventListener("focusout", (e) => { if (!wrap.contains(e.relatedTarget)) close(); });
+    clear.addEventListener("click", () => { reset(); input.focus(); });
+
+    function value() {
+      if (picked) return { title: picked.title, artist: picked.artist, itunesId: picked.itunesId };
+      const text = input.value.trim();
+      return text ? split(text) : null;
+    }
+
+    function set(song) {
+      clearTimeout(timer);
+      seq++;
+      close();
+      say("");
+      if (!song || !song.title) { reset(); return; }
+      picked = song.itunesId ? { title: song.title, artist: song.artist || "", itunesId: song.itunesId, artworkUrl: "" } : null;
+      input.value = song.artist ? `${song.title} — ${song.artist}` : song.title;
+      art.hidden = true;
+      clear.hidden = false;
+      wrap.dataset.state = picked ? "picked" : "typed";
+      if (picked) {
+        // its cover, looked up by id so it is the right one
+        resolve(song).then((s) => {
+          if (picked && picked.itunesId === song.itunesId && s.artworkUrl) {
+            picked.artworkUrl = s.artworkUrl;
+            art.src = small(s.artworkUrl);
+            art.hidden = false;
+          }
+        }, () => {});
+      }
+    }
+
+    function reset() {
+      clearTimeout(timer);
+      seq++;
+      input.value = "";
+      unpick();
+      close();
+      say("");
+    }
+
+    return { el: wrap, input, value, set, reset };
+  }
+
+  const api = { resolve, play, pause, toggle, current, chip, picker, search, transport: "fetch" };
   window.KimayaSongs = api;
 })();

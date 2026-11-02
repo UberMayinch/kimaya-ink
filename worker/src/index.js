@@ -10,13 +10,22 @@
 // GET    /api/admin/clip/:id         Bearer ADMIN_TOKEN, any status
 // POST   /api/admin/posts            Bearer ADMIN_TOKEN, same fields minus token, live at once
 // POST   /api/admin/posts/:id/approve
+// POST   /api/admin/posts/:id/unapprove   back to the queue (hidden from the site)
+// PATCH  /api/admin/posts/:id        json { name?, message?, taken_on?, song? } -> the updated fields
 // DELETE /api/admin/posts/:id
+//
+// every post form may also carry song_title / song_artist / song_itunes (optional): the song that goes with it.
+// song_itunes is apple's track id from the picker, so the site plays exactly that one; without it the site
+// searches apple by the words. stored as json in the song column (migrations/0004_song.sql).
 
 const MAX_PHOTO = 200 * 1024;
 const MAX_CLIP = 800 * 1024;
 const MAX_BODY = MAX_PHOTO + MAX_CLIP + 8 * 1024;
 const MAX_NAME = 24;
 const MAX_MESSAGE = 140;
+const MAX_SONG_TITLE = 80;
+const MAX_SONG_ARTIST = 60;
+const MAX_JSON = 8 * 1024;
 const PER_IP_PER_HOUR = 3;
 const MAX_PENDING = 300;
 const HOUR = 60 * 60 * 1000;
@@ -65,7 +74,9 @@ async function route(req, env) {
     if (parts[2] === "posts" && !parts[3] && req.method === "POST") return createAdminPost(req, env);
     if (parts[2] === "posts" && parts[3]) {
       if (parts[4] === "approve" && req.method === "POST") return setStatus(env, parts[3], "approved");
+      if (parts[4] === "unapprove" && req.method === "POST") return setStatus(env, parts[3], "pending");
       if (!parts[4] && req.method === "DELETE") return remove(env, parts[3]);
+      if (!parts[4] && req.method === "PATCH") return updatePost(req, env, parts[3]);
     }
   }
 
@@ -77,11 +88,11 @@ async function route(req, env) {
 // sorted as a series: when it was taken, else when it was posted
 async function listApproved(env) {
   const { results } = await env.DB.prepare(
-    `SELECT id, name, message, taken_on, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'approved'
+    `SELECT id, name, message, taken_on, created_at, song, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'approved'
      ORDER BY COALESCE(taken_on, strftime('%Y-%m-%d', created_at / 1000, 'unixepoch')) DESC, created_at DESC
      LIMIT ${WALL_LIMIT}`
   ).all();
-  return json({ posts: results.map(withClipFlag) }, 200, { "Cache-Control": "public, max-age=30" });
+  return json({ posts: results.map(withExtras) }, 200, { "Cache-Control": "public, max-age=30" });
 }
 
 async function photo(env, id, admin) {
@@ -185,7 +196,27 @@ async function readFields(form, textRequired) {
   const clip = await readClip(form);
   if (clip.error) return clip;
 
-  return { name, message, photo, takenOn, clip: clip.bytes, clipType: clip.type };
+  return { name, message, photo, takenOn, clip: clip.bytes, clipType: clip.type, song: readSong(form.get("song_title"), form.get("song_artist"), form.get("song_itunes")) };
+}
+
+// the song that goes with a post: {title, artist, itunesId?} or null. a title alone is enough to look up.
+function readSong(title, artist, itunes) {
+  const t = clean(title, MAX_SONG_TITLE);
+  if (!t) return null;
+  const song = { title: t, artist: clean(artist, MAX_SONG_ARTIST) };
+  const id = Number(itunes);
+  if (Number.isInteger(id) && id > 0) song.itunesId = id;
+  return song;
+}
+
+function parseSong(v) {
+  if (!v || typeof v !== "string") return null;
+  try {
+    const s = JSON.parse(v);
+    return s && typeof s.title === "string" && s.title ? { title: s.title, artist: typeof s.artist === "string" ? s.artist : "", ...(s.itunesId ? { itunesId: s.itunesId } : {}) } : null;
+  } catch {
+    return null;
+  }
 }
 
 // optional movie clip: webm (ebml magic) or mp4 (ftyp box), 800KB max
@@ -220,8 +251,9 @@ async function insertPost(env, f, ipHash, status) {
     created_at: Date.now(),
     taken_on: f.takenOn,
   };
-  // clip columns come from migrations/0002_clips.sql
+  // clip columns come from migrations/0002_clips.sql, song from 0004_song.sql
   if (f.clip) Object.assign(row, { clip: f.clip, clip_type: f.clipType });
+  if (f.song) row.song = JSON.stringify(f.song);
   const cols = Object.keys(row);
   await env.DB.prepare(`INSERT INTO posts (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
     .bind(...Object.values(row))
@@ -243,9 +275,43 @@ async function createAdminPost(req, env) {
 
 async function listPending(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, name, message, taken_on, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
+    "SELECT id, name, message, taken_on, created_at, song, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
   ).all();
-  return json({ posts: results.map(withClipFlag) }, 200, { "Cache-Control": "no-store" });
+  return json({ posts: results.map(withExtras) }, 200, { "Cache-Control": "no-store" });
+}
+
+// edit the words on a post. only the keys sent change; a song of null clears it.
+async function updatePost(req, env, id) {
+  const len = Number(req.headers.get("Content-Length") || 0);
+  if (len > MAX_JSON) return json({ error: "too big" }, 413);
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "bad json" }, 400);
+  }
+  if (!body || typeof body !== "object") return json({ error: "bad json" }, 400);
+  const set = {};
+  if ("name" in body) set.name = clean(body.name, MAX_NAME);
+  if ("message" in body) set.message = clean(body.message, MAX_MESSAGE);
+  if ("taken_on" in body) {
+    const v = body.taken_on === null || body.taken_on === "" ? null : validDay(body.taken_on);
+    if (v === false) return json({ error: "taken_on must be a real YYYY-MM-DD date" }, 400);
+    set.taken_on = v;
+  }
+  if ("song" in body) {
+    const s = body.song;
+    const song = s && typeof s === "object" ? readSong(s.title, s.artist, s.itunesId) : null;
+    set.song = song ? JSON.stringify(song) : null;
+  }
+  const keys = Object.keys(set);
+  if (!keys.length) return json({ error: "nothing to change" }, 400);
+  const r = await env.DB.prepare(`UPDATE posts SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`)
+    .bind(...keys.map((k) => set[k]), id)
+    .run();
+  if (!r.meta.changes) return json({ error: "not found" }, 404);
+  const row = await env.DB.prepare("SELECT id, name, message, taken_on, created_at, status, song, clip IS NOT NULL AS has_clip FROM posts WHERE id = ?").bind(id).first();
+  return json({ ok: true, post: withExtras(row) });
 }
 
 async function setStatus(env, id, status) {
@@ -301,8 +367,8 @@ function parseRange(header, total) {
   return { start, end };
 }
 
-function withClipFlag(p) {
-  return { ...p, has_clip: !!p.has_clip };
+function withExtras(p) {
+  return { ...p, has_clip: !!p.has_clip, song: parseSong(p.song) };
 }
 
 function toBytes(v) {
@@ -332,7 +398,7 @@ function corsHeaders(req, env) {
   if (!ok) return {};
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, Range",
     "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range",
     "Access-Control-Max-Age": "86400",

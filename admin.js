@@ -1,7 +1,8 @@
 // approve or delete guestbook posts. token lives in sessionStorage only.
 
 const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-const API = LOCAL ? "http://localhost:8787/api" : "https://kimaya-guestbook.kimaya-ink.workers.dev/api";
+// ?api=http://127.0.0.1:8788/api points a local page at another local worker (dev only: the token is sent there)
+const API = (LOCAL && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api$/.test(new URLSearchParams(location.search).get("api") || "") && new URLSearchParams(location.search).get("api")) || (LOCAL ? "http://localhost:8787/api" : "https://kimaya-guestbook.kimaya-ink.workers.dev/api");
 
 const $ = (id) => document.getElementById(id);
 const blobs = [];
@@ -40,35 +41,68 @@ function card(p, pending) {
   if (!movie) pic.alt = "";
   media(`/admin/photo/${id}`, (url) => { movie ? (pic.poster = url) : (pic.src = url); });
   if (movie) media(`/admin/clip/${id}`, (url) => { pic.src = url; });
-  const msg = document.createElement("p");
-  msg.textContent = p.message;
-  const by = document.createElement("small");
-  by.textContent = `${p.name || "(no name)"} · ${new Date(p.created_at).toLocaleString()}`;
-  if (p.taken_on) {
-    const d = document.createElement("span");
-    d.className = "print-date";
-    d.textContent = `${KimayaUploads.stamp(p.taken_on)} · `;
-    by.prepend(d);
-  }
+  // everything written on the post can be changed here and saved
+  const form = document.createElement("form");
+  form.className = "edit";
+  const name = field("name", 24, p.name || "");
+  const msg = document.createElement("textarea");
+  msg.placeholder = "note";
+  msg.maxLength = 140;
+  msg.rows = 2;
+  msg.value = p.message || "";
+  const date = field("", 0, p.taken_on || "");
+  date.type = "date";
+  date.min = "1900-01-01";
+  date.max = new Date().toISOString().slice(0, 10);
+  const song = KimayaSongs.picker(null, { placeholder: "♪ song (optional)" });
+  song.set(p.song);
+  const save = document.createElement("button");
+  save.className = "hud-btn";
+  save.textContent = "SAVE";
+  const state = document.createElement("small");
+  state.className = "state";
+  state.textContent = `posted ${new Date(p.created_at).toLocaleString()}`;
+  const line1 = document.createElement("div");
+  line1.append(name, date);
+  const line2 = document.createElement("div");
+  line2.append(song.el);
+  form.append(msg, line1, line2, save, state);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    save.disabled = true;
+    state.textContent = "saving…";
+    try {
+      const r = await call(`/admin/posts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.value.trim(), message: msg.value.trim(), taken_on: date.value || null, song: song.value() }),
+      });
+      const { post } = await r.json();
+      state.textContent = `saved · ${post.taken_on ? KimayaUploads.stamp(post.taken_on) + " · " : ""}${post.song ? `♪ ${post.song.title}${post.song.artist ? " — " + post.song.artist : ""}` : "no song"}`;
+    } catch (err) {
+      state.textContent = err.message;
+    } finally {
+      save.disabled = false;
+    }
+  });
 
   const row = document.createElement("div");
   row.className = "row";
-  if (pending) {
-    const ok = document.createElement("button");
-    ok.className = "hud-btn";
-    ok.textContent = "APPROVE";
-    ok.onclick = () => act(`/admin/posts/${encodeURIComponent(p.id)}/approve`, "POST");
-    row.append(ok);
-  }
+  const flip = document.createElement("button");
+  flip.className = "hud-btn";
+  flip.textContent = pending ? "APPROVE" : "UNAPPROVE";
+  flip.title = pending ? "show it on the site" : "take it off the site, back to the queue";
+  flip.onclick = () => act(`/admin/posts/${id}/${pending ? "approve" : "unapprove"}`, "POST");
+  row.append(flip);
   const del = document.createElement("button");
   del.className = "hud-btn del";
   del.textContent = "DELETE";
   del.onclick = () => {
-    if (confirm(`Delete ${p.name}'s post? This can't be undone.`)) act(`/admin/posts/${encodeURIComponent(p.id)}`, "DELETE");
+    if (confirm(`Delete ${p.name || "this"} post? This can't be undone.`)) act(`/admin/posts/${id}`, "DELETE");
   };
   row.append(del);
 
-  el.append(pic, msg, by, row);
+  el.append(pic, form, row);
   return el;
 }
 
@@ -119,6 +153,7 @@ function addItem(result, file) {
 
   const caption = field("caption (optional)", 140);
   const name = field("name (optional)", 24);
+  const song = KimayaSongs.picker(null, { placeholder: "♪ song (optional)" });
   const date = field("", 0, result.takenOn || "");
   date.type = "date";
   date.min = "1900-01-01";
@@ -153,11 +188,13 @@ function addItem(result, file) {
 
   const line = document.createElement("div");
   line.append(name, date, drop);
+  const songLine = document.createElement("div");
+  songLine.append(song.el);
   const fields = document.createElement("div");
   fields.className = "fields";
-  fields.append(caption, line, state);
+  fields.append(caption, line, songLine, state);
   row.append(thumb, fields);
-  Object.assign(it, { row, caption, name, date, state });
+  Object.assign(it, { row, caption, name, date, state, song });
   items.push(it);
   $("add-list").append(row);
 }
@@ -175,6 +212,12 @@ async function uploadAll() {
       form.append("name", it.name.value.trim() || $("add-by").value.trim());
       form.append("message", it.caption.value.trim());
       if (it.date.value) form.append("taken_on", it.date.value);
+      const song = it.song.value();
+      if (song) {
+        form.append("song_title", song.title);
+        form.append("song_artist", song.artist || "");
+        if (song.itunesId) form.append("song_itunes", song.itunesId);
+      }
       form.append("photo", photo, "shot.jpg");
       if (clip) form.append("clip", clip, clip.type === "video/mp4" ? "clip.mp4" : "clip.webm");
       await call("/admin/posts", { method: "POST", body: form });

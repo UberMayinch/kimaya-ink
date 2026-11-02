@@ -18,8 +18,16 @@ jobs:
       - name: photos.json is valid
         run: |
           jq -e 'type == "array"' photos.json > /dev/null
-          jq -e 'all(.[]; has("file") and has("date"))' photos.json > /dev/null \
-            || { echo "::error::every entry needs \"file\" and \"date\""; exit 1; }
+          jq -e 'all(.[]; has("date"))' photos.json > /dev/null \
+            || { echo "::error::every entry needs \"date\""; exit 1; }
+          jq -e 'all(.[]; (has("type") | not) or (.type | IN("photo", "clip", "letter", "audio")))' photos.json > /dev/null \
+            || { echo "::error::\"type\" must be photo, clip, letter or audio"; exit 1; }
+          jq -e 'all(.[]; (.type == "letter") or has("file"))' photos.json > /dev/null \
+            || { echo "::error::every entry except letters needs \"file\""; exit 1; }
+          jq -e 'all(.[]; (.type != "letter") or ((.text | type) == "string" and (.text | length) > 0))' photos.json > /dev/null \
+            || { echo "::error::a letter needs a non-empty \"text\""; exit 1; }
+          jq -e 'all(.[]; (.type != "audio") or (.file | test("^photos/.+\\.(m4a|mp3|ogg|wav)$")))' photos.json > /dev/null \
+            || { echo "::error::an audio entry needs \"file\" like photos/name.m4a (m4a, mp3, ogg or wav)"; exit 1; }
           jq -e 'all(.[]; .date | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))' photos.json > /dev/null \
             || { echo "::error::dates must be YYYY-MM-DD"; exit 1; }
           jq -e 'all(.[]; (has("song") | not) or (.song | (type == "object")
@@ -27,10 +35,19 @@ jobs:
                    and ((has("itunesId") | not) or ((.itunesId | type) == "number"))))' photos.json > /dev/null \
             || { echo "::error::\"song\" must be {\"title\": \"...\", \"artist\": \"...\"} (itunesId optional, a number)"; exit 1; }
 
-      - name: every listed photo exists
+      - name: every listed file exists
         run: |
-          jq -r '.[].file' photos.json | while read -r f; do
+          jq -r '.[] | select(has("file")) | .file' photos.json | while read -r f; do
             [ -f "$f" ] || { echo "::error::missing file: $f"; exit 1; }
+          done
+          jq -r '.[] | select(has("cover")) | .cover' photos.json | while read -r f; do
+            [ -f "$f" ] || { echo "::error::missing cover: $f"; exit 1; }
+          done
+
+      - name: audio notes are small
+        run: |
+          jq -r '.[] | select(.type == "audio") | .file' photos.json | while read -r f; do
+            [ "$(stat -c %s "$f")" -lt 3145728 ] || { echo "::error file=$f::voice note is 3MB or more, please shrink it"; exit 1; }
           done
 
       - name: every listed clip exists and is small
@@ -42,9 +59,19 @@ jobs:
             [ "$(stat -c %s "$f")" -lt 3145728 ] || { echo "::error file=$f::clip is 3MB or more, please shrink it"; exit 1; }
           done
 
+      - name: cache-busting versions agree
+        run: |
+          v=$(grep -o 'journey.js?v=[0-9]*' index.html | head -1 | sed 's/.*v=//')
+          [ -n "$v" ] || { echo "::error::index.html has no journey.js?v="; exit 1; }
+          grep -rho '[a-z-]*\.js?v=[0-9]*' journey.js experience | sed 's/.*v=//' | sort -u | while read -r x; do
+            [ "$x" = "$v" ] || { echo "::error::an experience/*.js import carries ?v=$x but index.html loads journey.js?v=$v"; exit 1; }
+          done
+          grep -rhoE 'from "\./[a-z/-]+\.js"' journey.js experience | head -1 | grep -q . && { echo "::error::hero module imports need ?v= (run tools/bump-version.sh)"; exit 1; }
+          true
+
       - name: photos are web-sized
         run: |
-          find photos -type f ! -name '*.mp4' -size +2M | while read -r f; do
+          find photos -type f ! -name '*.mp4' ! -name '*.m4a' ! -name '*.mp3' ! -name '*.ogg' ! -name '*.wav' -size +2M | while read -r f; do
             echo "::warning file=$f::over 2MB, please shrink it"
           done
 

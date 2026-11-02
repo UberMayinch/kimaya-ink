@@ -15,6 +15,7 @@
     body { margin: 0; padding: 24px; background: #0b0b0c; color: var(--ink); font: 20px var(--mono); }
     h1 { margin: 0 0 4px; color: var(--hud); font-weight: 400; letter-spacing: .1em; }
     p { margin: 0 0 18px; color: var(--dim); }
+    #pick input { width: 100%; box-sizing: border-box; background: #0b0b0c; border: 1px solid #333; color: var(--ink); font: italic 20px var(--serif); padding: 8px 10px; }
     .row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
     .print { width: 220px; padding: 10px; background: #f4f1ea; color: #2a2724; --song-link: #6b665e; transform: rotate(-2deg); }
     .print .photo { aspect-ratio: 4 / 3; background: linear-gradient(135deg, #3a2b40, #c06a3a); }
@@ -28,6 +29,7 @@
   <h1>&#9834; SONGS DEMO</h1>
   <p>resolve + play test for songs.js. add <code>?jsonp</code> to force the jsonp transport.</p>
 
+  <div class="row" id="pick" style="display:block;max-width:420px"></div>
   <div class="row" id="screen"></div>
   <div class="row" id="prints"></div>
 
@@ -54,6 +56,13 @@
       const el = document.getElementById("log");
       el.textContent = `${new Date().toLocaleTimeString()}  ${msg}\n` + el.textContent;
     };
+
+    // the picker: type, pick a row, the chosen song (with apple's id) is logged and gets a chip
+    const picker = S.picker(document.getElementById("pick"));
+    picker.el.addEventListener("kimaya:song-pick", (e) => {
+      log(`picked ${JSON.stringify(e.detail.song)}`);
+      document.getElementById("screen").prepend(S.chip(e.detail.song));
+    });
 
     songs.forEach((s) => document.getElementById("screen").append(S.chip(s)));
 

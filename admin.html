@@ -6,7 +6,8 @@
   <meta name="robots" content="noindex">
   <title>kimaya · approvals</title>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="songs.css?v=2">
   <style>
     .admin { max-width: 900px; margin: 0 auto; }
     .admin form { display: flex; gap: 10px; margin: 20px 0; }
@@ -17,6 +18,13 @@
     .card p { margin: 8px 0; font: italic 19px var(--serif); overflow-wrap: anywhere; }
     .card small { font: 15px var(--mono); color: #6d6862; }
     .card .row { display: flex; justify-content: space-between; margin-top: 8px; }
+    .card .edit { display: grid; gap: 6px; margin-top: 8px; }
+    .card .edit div { display: flex; gap: 6px; }
+    .card .edit .song-pick { flex: 1; min-width: 0; }
+    .card .edit input, .card .edit textarea { flex: 1; min-width: 0; background: #fff; border: 1px solid #cfc9bd; color: #2a2724; font: italic 17px var(--serif); padding: 4px 6px; resize: none; }
+    .card .edit input[type="date"] { flex: 0 0 150px; font: 15px var(--mono); }
+    .card .edit .hud-btn { justify-self: start; }
+    .card .edit .state { color: #6d6862; font: 14px var(--mono); }
     .card .hud-btn { color: #1d5e46; border-color: #1d5e46; text-shadow: none; }
     .card .hud-btn.del { color: #a23a12; border-color: #a23a12; }
     h2 { font: 24px var(--mono); color: var(--hud); letter-spacing: .1em; margin: 40px 0 16px; }
@@ -32,6 +40,7 @@
     .item .fields { display: grid; gap: 8px; }
     .item .fields div { display: flex; gap: 8px; flex-wrap: wrap; }
     .item .fields input { flex: 1; min-width: 120px; }
+    .item .fields .song-pick { flex: 1; min-width: 200px; }
     .item .state { color: var(--dim); }
     .item.err .state { color: var(--stamp); }
     .item.done { opacity: .55; }
@@ -48,7 +57,7 @@
     <p id="status"></p>
     <h2>ADD TO GALLERY</h2>
     <section class="add">
-      <p class="fine">pick photos or short videos (first 5s are used). each one is shrunk, stripped of all metadata including location, and stamped with its date on this computer before it's sent. they go live straight away.</p>
+      <p class="fine">pick photos or short videos (the first 8s, with their sound, are used). each one is shrunk, stripped of all metadata including location, and stamped with its date on this computer before it's sent. they go live straight away.</p>
       <div class="add-bar">
         <span id="add-pick"></span>
         <input id="add-by" maxlength="24" placeholder="name for all (optional)">
@@ -61,8 +70,9 @@
     <h2>LIVE</h2>
     <div class="queue" id="live"></div>
   </main>
-  <script src="clips.js?v=1"></script>
-  <script src="uploads.js?v=1"></script>
-  <script src="admin.js?v=2"></script>
+  <script src="songs.js?v=2"></script>
+  <script src="clips.js?v=2"></script>
+  <script src="uploads.js?v=2"></script>
+  <script src="admin.js?v=4"></script>
 </body>
 </html>

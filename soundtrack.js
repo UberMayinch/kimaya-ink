@@ -280,6 +280,7 @@
         o.frequency.value = mtof(m);
         o.detune.value = cents + (Math.random() * 4 - 2);
         this.eng.detune.connect(o.detune);
+        o.onended = () => this.eng.detune.disconnect(o.detune); // let stopped voices be freed
         const og = ctx.createGain();
         og.gain.value = g;
         const pan = ctx.createStereoPanner();
@@ -303,6 +304,7 @@
       const o = ctx.createOscillator();
       o.frequency.value = mtof(c.bass) * h;
       this.eng.detune.connect(o.detune);
+      o.onended = () => this.eng.detune.disconnect(o.detune);
       const og = ctx.createGain();
       og.gain.value = g;
       o.connect(og);
@@ -335,6 +337,10 @@
     if (detuned) {
       eng.detune.connect(car.detune);
       eng.detune.connect(mod.detune);
+      car.onended = () => {
+        eng.detune.disconnect(car.detune);
+        eng.detune.disconnect(mod.detune);
+      };
     }
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
@@ -1085,6 +1091,7 @@
       if (running) return true;
       running = true;
       muted = false;
+      if (songState === "failed") songState = "idle"; // every fresh start retries the preview
       const t = ctx.currentTime;
       eng.out.gain.cancelScheduledValues(0);
       eng.out.gain.setValueAtTime(eng.out.gain.value, t);
@@ -1316,6 +1323,8 @@
   const GESTURES = ["pointerup", "click", "keydown", "touchend"];
   function onFirstGesture(e) {
     if (!pending) return disarm();
+    // a swipe-scroll touchend isn't an activation: starting then would be "on" but silent
+    if (navigator.userActivation && !navigator.userActivation.isActive) return;
     if (e.target && e.target.closest && e.target.closest(".j-sound")) return; // the toggle decides
     if (e.type === "keydown" && (e.key === "Escape" || e.key === "Tab")) return;
     disarm();

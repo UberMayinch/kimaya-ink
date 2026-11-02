@@ -98,9 +98,10 @@
   function get(path, params) {
     const url = API + path + "?" + new URLSearchParams(params);
     if (api.transport === "jsonp") return jsonp(url);
+    // only a blocked/failed request falls back; a 403 (rate limit) shouldn't cost a second call
     return fetch(url)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`itunes ${r.status}`))))
-      .catch((err) => (typeof document !== "undefined" ? jsonp(url) : Promise.reject(err)));
+      .catch((err) => (typeof document !== "undefined" ? jsonp(url).then((d) => ({ ok: true, json: () => d })) : Promise.reject(err)))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`itunes ${r.status}`))));
   }
 
   // itunes allows ~20 calls a minute, so keep it to two at a time
@@ -193,6 +194,8 @@
     if (audio) return audio;
     audio = new Audio();
     audio.preload = "none";
+    // a new src can drop the queued pause we meant to swallow, so never let the flag outlive the load
+    audio.addEventListener("loadstart", () => { swallowPause = false; });
     audio.addEventListener("playing", () => { emit("playing", cur); sync(); });
     audio.addEventListener("pause", () => {
       if (swallowPause) { swallowPause = false; return; }

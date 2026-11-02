@@ -17,6 +17,9 @@
   const white = $("b-white");
   let stream = null;
   let blob = null;
+  let clip = null; // uploaded videos only
+  let takenOn = null;
+  let shotUrl = null;
 
   function state(name) {
     booth.dataset.state = name;
@@ -25,7 +28,7 @@
   // ---------- open / close ----------
 
   function open() {
-    blob = null;
+    reset("camera");
     $("b-err").textContent = "";
     state("intro");
     booth.hidden = false;
@@ -46,7 +49,36 @@
 
   // ---------- camera ----------
 
+  // camera shot or upload: what review shows and send posts
+  function reset(source) {
+    blob = null;
+    clip = null;
+    takenOn = null;
+    booth.dataset.source = source;
+    if (shotUrl) URL.revokeObjectURL(shotUrl);
+    shotUrl = null;
+    if (picker) picker.reset();
+    if (window.KimayaUploads) KimayaUploads.preview($("b-up"), null);
+    $("b-retake").textContent = source === "upload" ? "↺ PICK AGAIN" : "↺ RETAKE";
+  }
+
+  function uploaded(result) {
+    stop();
+    reset("upload");
+    blob = result.photo;
+    clip = result.clip || null;
+    takenOn = result.takenOn || null;
+    shotUrl = URL.createObjectURL(blob);
+    shot.src = shotUrl;
+    if (clip) KimayaUploads.preview($("b-up"), result);
+    state("review");
+    $("b-name").focus();
+  }
+
+  const picker = window.KimayaUploads ? KimayaUploads.mountPicker($("b-pick"), uploaded, { big: true, preview: false }) : null;
+
   async function start() {
+    reset("camera");
     $("b-err").textContent = "";
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -185,6 +217,8 @@
       form.append("name", name);
       form.append("message", message);
       form.append("photo", blob, "shot.jpg");
+      if (clip) form.append("clip", clip, clip.type === "video/mp4" ? "clip.mp4" : "clip.webm");
+      if (takenOn) form.append("taken_on", takenOn);
       form.append("token", await token());
       const r = await fetch(`${API}/posts`, { method: "POST", body: form });
       const data = await r.json().catch(() => ({}));
@@ -224,15 +258,22 @@
         frame.className = "frame";
         const img = document.createElement("img");
         img.src = `${API}/photo/${encodeURIComponent(p.id)}`;
-        img.alt = `${p.name}'s picture`;
+        img.alt = p.name ? `${p.name}'s picture` : p.message || "a picture";
         img.loading = "lazy";
         frame.append(img);
         const cap = document.createElement("figcaption");
         cap.className = "label";
         cap.textContent = p.message;
+        // owner uploads may have no name or caption; taken_on is the print's date
         const by = document.createElement("small");
-        by.textContent = `— ${p.name}`;
-        cap.append(by);
+        if (p.name) by.textContent = `— ${p.name}`;
+        if (p.taken_on) {
+          const d = document.createElement("span");
+          d.className = "print-date";
+          d.textContent = stamp(new Date(`${p.taken_on}T12:00:00`));
+          by.append(d);
+        }
+        if (by.childNodes.length) cap.append(by);
         fig.append(frame, cap);
         el.append(fig);
       });
@@ -248,7 +289,7 @@
   $("b-close").addEventListener("click", close);
   $("b-start").addEventListener("click", start);
   $("b-shutter").addEventListener("click", shoot);
-  $("b-retake").addEventListener("click", start);
+  $("b-retake").addEventListener("click", () => (booth.dataset.source === "upload" ? open() : start()));
   $("b-again").addEventListener("click", open);
   $("b-form").addEventListener("submit", send);
   $("b-msg").addEventListener("input", (e) => {

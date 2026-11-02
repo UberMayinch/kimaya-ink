@@ -422,7 +422,16 @@ body {
   font-size: 15px;
   color: #6d6862;
 }
+.guest .label .print-date { float: right; color: #c2601a; letter-spacing: .08em; }
 .guests-empty { grid-column: 1 / -1; color: var(--dim); text-align: center; margin: 10px 0 0; }
+
+/* ---------- uploads (uploads.js) ---------- */
+
+.up-pick { display: grid; justify-items: center; gap: 6px; }
+.up-status { margin: 0; min-height: 1em; color: var(--stamp); font-size: 18px; text-align: center; }
+.up-status:empty { display: none; }
+.up-preview img, .up-preview video { display: block; max-width: 100%; max-height: 240px; background: #000; }
+.up-preview:empty { display: none; }
 
 /* ---------- booth ---------- */
 
@@ -493,6 +502,13 @@ body {
   font-size: 24px;
 }
 .booth-intro p, .booth-sent p { margin: 0; }
+.booth-pick { display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: 10px; }
+.booth-intro .up-status { max-width: 30ch; }
+
+/* uploaded clip loops over the poster during review */
+.booth-up { position: absolute; inset: 0; display: none; }
+.booth-up video { display: block; transform: none; }
+.booth[data-state="review"] .booth-up { display: block; }
 .fine { color: var(--dim); font-size: 18px; }
 .booth-sent p:first-child { color: var(--hud); font-size: 40px; letter-spacing: .14em; }
 

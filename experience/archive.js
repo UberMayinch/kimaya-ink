@@ -9,8 +9,8 @@
 //     -> { lcd, items, open(), close(), isOpen(), t, view, sel, select(i), step(dir), onAction(action, hit),
 //          drawLCD(), live(), rec, tick(now), srText }
 
-import { loadArchive, letterParagraphs } from "./archive-data.js?v=36";
-import { stampOf, wait } from "./util.js?v=36";
+import { loadArchive, letterParagraphs } from "./archive-data.js?v=37";
+import { stampOf, wait } from "./util.js?v=37";
 
 const W = 640, H = 480;
 const LEFT = 104; // the top-left of the screen sits under her sticker
@@ -127,8 +127,8 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     window.addEventListener("kimaya:audio-claim", (e) => { if (e.detail !== "voice" && !el.paused) el.pause(); });
     return el;
   }
-  // the bed under a clip's own sound: nearly out, unless it's the memory's own song, which just steps back
-  function duck(on) { window.KimayaSound?.duck(on, on && current()?.song ? 0.25 : undefined); }
+  // a clip's own sound is on: the bed doesn't step back by itself here, the speaker's bar is the level
+  function duck(on) { window.KimayaSound?.duck(on, 1); }
   function analyserFor(el) {
     if (audio.analyser) return audio.analyser;
     try {
@@ -190,8 +190,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     pageSong();
     journey.classList.remove("focused");
     document.body.classList.remove("j-locked");
-    const vol = $(".j-vol-panel");
-    if (vol) { vol.hidden = true; $(".j-vol")?.setAttribute("aria-expanded", "false"); }
+    vol.open = false;
     if (document.activeElement?.closest?.(".j-focusmode")) setTimeout(() => journey.querySelector(".j-see")?.focus({ preventScroll: true }), 200);
     if (!fromHistory && history.state && history.state.kimayaArchive) {
       fromHistory = true;
@@ -219,6 +218,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
       flipped(performance.now());
       stopAudio();
       stopClip(); // the next clip starts silent: sound is a choice, one memory at a time
+      vol.open = false;
       window.KimayaSound?.cue("beep");
     }
     pageSong();
@@ -286,6 +286,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
       }
       return true;
     }
+    if (tapSound(x, y)) return true;
     onAction("ok");
     return true;
   }
@@ -384,6 +385,84 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     if (glow) { g.shadowColor = `rgba(255,90,0,${glow})`; g.shadowBlur = 8; }
     g.fillText(t, x, y);
     g.shadowBlur = 0;
+  }
+
+  // ---------- the speaker on the screen: for memories that carry sound ----------
+  // a song, a clip's own voice, or a voice note. a press drops a bar: the song's level next to the clip's,
+  // from nothing (the clip alone) to as loud as the clip. the clip and the voice note themselves don't move
+
+  const vol = { open: false };
+  const SPK = { x: W - 40, y: 64 };
+  const PANEL = { x: W - 246, y: 90, w: 230, h: 72 };
+  const hasAudio = (it) => !!(it && (it.song || it.type === "clip" || it.type === "audio"));
+  function level() {
+    const v = window.KimayaSound?.volume?.();
+    return typeof v === "number" ? v : 0.7;
+  }
+  function setLevel(v) {
+    window.KimayaSound?.setVolume?.(Math.min(1, Math.max(0, v)));
+  }
+  window.addEventListener("kimaya:sound", () => mark());
+
+  function drawSpeaker(x, y, lvl, on) {
+    g.save();
+    g.strokeStyle = g.fillStyle = on ? HUD : DIM;
+    g.lineWidth = 2;
+    g.beginPath(); g.rect(x - 16, y - 5, 7, 10); g.fill();
+    g.beginPath(); g.moveTo(x - 9, y - 5); g.lineTo(x - 1, y - 12); g.lineTo(x - 1, y + 12); g.lineTo(x - 9, y + 5); g.closePath(); g.fill();
+    if (!on || lvl <= 0) {
+      g.beginPath(); g.moveTo(x + 5, y - 7); g.lineTo(x + 17, y + 7); g.moveTo(x + 17, y - 7); g.lineTo(x + 5, y + 7); g.stroke();
+    } else {
+      g.beginPath(); g.arc(x + 1, y, 7, -0.9, 0.9); g.stroke();
+      if (lvl > 0.34) { g.beginPath(); g.arc(x + 1, y, 12, -0.9, 0.9); g.stroke(); }
+      if (lvl > 0.67) { g.beginPath(); g.arc(x + 1, y, 17, -0.9, 0.9); g.stroke(); }
+    }
+    g.restore();
+  }
+
+  function drawSound(it, blinkOn) {
+    if (!hasAudio(it)) return;
+    const lvl = level();
+    const on = !!window.KimayaSound?.isOn?.() && lvl > 0;
+    if (it.song) {
+      const line = `${on && !blinkOn ? " " : "♪"} ${it.song.title}${it.song.artist ? ` — ${it.song.artist}` : ""}`;
+      text(line.length > 34 ? line.slice(0, 33) + "…" : line, LEFT, 64, { size: 26, color: on ? HUD : INK });
+    }
+    drawSpeaker(SPK.x, SPK.y, lvl, on);
+    if (!vol.open) return;
+    const { x, y, w, h } = PANEL;
+    g.fillStyle = "rgba(5,6,7,.92)";
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = "rgba(159,232,200,.5)";
+    g.lineWidth = 1;
+    g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    text("♪ SONG UNDER IT", x + 12, y + 22, { size: 22, color: HUD });
+    text(lvl <= 0 ? "OFF" : `${Math.round(lvl * 100)}%`, x + w - 12, y + 22, { align: "right", size: 24, color: INK });
+    const x0 = x + 14, x1 = x + w - 14, by = y + 54;
+    g.fillStyle = "#2a3330";
+    g.fillRect(x0, by - 3, x1 - x0, 6);
+    g.fillStyle = ORANGE;
+    g.fillRect(x0, by - 3, (x1 - x0) * lvl, 6);
+    g.beginPath();
+    g.arc(x0 + (x1 - x0) * lvl, by, 7, 0, Math.PI * 2);
+    g.fillStyle = INK;
+    g.fill();
+  }
+
+  // a touch on the speaker or its panel (screen coordinates). true when it was for them
+  function tapSound(x, y) {
+    const it = current();
+    if (!hasAudio(it)) return false;
+    if (Math.abs(x - SPK.x) <= 26 && Math.abs(y - SPK.y) <= 22) { vol.open = !vol.open; mark(); return true; }
+    if (!vol.open) return false;
+    const { x: px, y: py, w, h } = PANEL;
+    if (x >= px && x <= px + w && y >= py && y <= py + h) {
+      if (y >= py + 36) setLevel((x - (px + 14)) / (w - 28)); // the bar: where you touch is the level
+    } else {
+      vol.open = false;
+    }
+    mark();
+    return true;
   }
 
   function chrome({ top = true, bottom = true, blinkOn = true } = {}) {
@@ -505,12 +584,8 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     text(`${it.dsc}   ${A.sel + 1}/${A.items.length}`, W - 70, 23, { align: "right", size: 28 });
     const cap = (it.caption || "") + (it.by ? `  — ${it.by}` : "");
     if (cap.trim()) text(cap.length > 46 ? cap.slice(0, 45) + "…" : cap, 16, H - 27, { font: "serif", size: 28, color: INK });
-    if (it.song) {
-      const on = !!window.KimayaSound?.isOn?.();
-      const line = `${on && !blinkOn ? " " : "♪"} ${it.song.title}${it.song.artist ? ` — ${it.song.artist}` : ""}`;
-      text(line.length > 40 ? line.slice(0, 39) + "…" : line, LEFT, 64, { size: 26, color: on ? HUD : INK });
-    }
     if (it.date && !it.stamped) text(stampOf(new Date(it.date + "T12:00:00")), W - 16, H - 74, { align: "right", size: 34, color: ORANGE, glow: 0.9 });
+    drawSound(it, blinkOn);
   }
 
   // letters: word-wrapped in instrument serif, 10 lines a page, layout cached per item
@@ -555,6 +630,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     if (who) text(who.length > 40 ? who.slice(0, 39) + "…" : who, 16, H - 27, { font: "serif", size: 24, color: INK });
     if (it.date) text(stampOf(new Date(it.date + "T12:00:00")), W - 16, H - 27, { align: "right", size: 30, color: ORANGE, glow: 0.9 });
     if (pages.length > 1 && page < pages.length - 1) text("OK ▶", W - 16, H - 74, { align: "right", size: 24, color: DIM });
+    if (it.id !== "draft") drawSound(it, blinkOn);
   }
 
   function drawAudio(it, blinkOn) {
@@ -580,6 +656,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     const cur = audio.item === it && el ? el.currentTime || 0 : 0;
     const dur = audio.item === it && el && isFinite(el.duration) ? el.duration : it.duration || 0;
     text(`${fmt(cur)} / ${fmt(dur)}`, W / 2, 350, { align: "center", size: 34, color: INK });
+    drawSound(it, blinkOn);
     if (!it.audio) text("no recording attached", W / 2, 390, { align: "center", size: 22, color: DIM });
     chrome({ blinkOn });
     text("♪ VOICE", LEFT, 23);

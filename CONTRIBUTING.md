@@ -166,7 +166,7 @@ A note is one more kind of memory, next to a photo and a video: **✎ A NOTE** o
 
 ### songs on posts
 
-The booth's note form (and the admin uploader) has an optional song title + artist. It is stored on the post and shown as a `♪` chip on the fallback page's prints (the site looks the 30-second preview up on Apple when the chip is pressed, nothing is hosted here). Inside the camera there is no chip: the song's name is written on the LCD, and looking at a memory makes its song the page's song (`KimayaSound.setSong`), crossfading the bed from Pink + White. It stays that way until the next memory with a song.
+The booth's note form (and the admin uploader) has an optional song title + artist. It is stored on the post and shown as a `♪` chip on the fallback page's prints (the site looks the 30-second preview up on Apple when the chip is pressed, nothing is hosted here). Inside the camera there is no chip: the song's name is written on the LCD, and looking at a memory makes its song the page's song (`KimayaSound.setSong`), crossfading the bed from Pink + White. It stays that way until the next memory with a song. A memory that carries sound (a song, a clip, a voice note, a note with a song) gets a speaker drawn on the screen; pressing it drops a bar for the song's level next to the clip's own sound (`KimayaSound.setVolume`, remembered): nothing means the clip alone, full means the song as loud as the clip. The clip and the voice note themselves don't move. Touching the screen works everywhere: a thumbnail opens, a picture answers like OK.
 
 ### editing
 

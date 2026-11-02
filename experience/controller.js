@@ -12,7 +12,7 @@
 // a glide or a fly at any time, so everything reverses. two transitions never run at once: there is
 // only ever one target.
 
-import { clamp, lerp, smoother } from "./util.js?v=36";
+import { clamp, lerp, smoother } from "./util.js?v=37";
 
 export const R = {
   PORTRAIT: 0.30,

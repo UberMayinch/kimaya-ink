@@ -1370,33 +1370,6 @@
       return new Blob([b], { type: "audio/wav" });
     },
 
-    // the speaker: a button that drops a panel with the bed's level (and a toggle inside, class j-sound)
-    bindVolume(wrap) {
-      const btn = wrap.querySelector(".j-vol"), panel = wrap.querySelector(".j-vol-panel");
-      const range = wrap.querySelector(".j-vol-range"), val = wrap.querySelector(".j-vol-val");
-      if (!btn || !panel || !range || btn._kimaya) return;
-      btn._kimaya = true;
-      ["click", "pointerdown", "pointerup", "wheel", "dblclick"].forEach((n) => wrap.addEventListener(n, (e) => e.stopPropagation()));
-      btn.addEventListener("click", () => {
-        const open = panel.hidden;
-        panel.hidden = !open;
-        btn.setAttribute("aria-expanded", open ? "true" : "false");
-        if (open) range.focus({ preventScroll: true });
-      });
-      range.addEventListener("input", () => api.setVolume(range.value / 100));
-      const paint = () => {
-        const v = api.volume();
-        const pct = Math.round(v * 100);
-        if (document.activeElement !== range) range.value = pct;
-        if (val) val.textContent = `${pct}%`;
-        btn.textContent = pct === 0 ? "🔇" : pct < 50 ? "🔉" : "🔊";
-        btn.classList.toggle("is-on", api.state().on);
-      };
-      window.addEventListener("kimaya:sound", paint);
-      paint();
-      return wrap;
-    },
-
     // wire a toggle button (and optional credit link). index.html does this automatically for .j-sound
     bindToggle(btn, credit) {
       if (!btn || btn._kimaya) return;
@@ -1477,7 +1450,6 @@
       const scope = btn.closest(".j-hud, .j-audio") || btn.parentElement;
       api.bindToggle(btn, scope && scope.querySelector(".j-credit"));
     });
-    document.querySelectorAll(".j-volume").forEach((w) => api.bindVolume(w));
     emit();
   }
 

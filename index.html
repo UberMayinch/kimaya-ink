@@ -10,8 +10,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
   <link rel="stylesheet" href="songs.css?v=1">
+  <link rel="stylesheet" href="soundtrack.css?v=1">
   <script type="importmap">
     {
       "imports": {
@@ -28,12 +29,14 @@
   <section class="journey" id="journey" aria-label="kimaya, through the lens">
     <div class="journey-pin">
       <img class="journey-still" src="assets/kimaya.jpg" alt="kimaya">
-      <div class="j-hud" aria-hidden="true">
-        <span class="j-rec">&#9679; REC</span>
-        <span class="j-focus"><i></i><i></i><i></i><i></i></span>
-        <span class="j-zoom">W <b><i></i></b> T</span>
-        <span class="j-date stamp">'23 10 29</span>
-        <span class="j-hint">SCROLL &#9660;</span>
+      <div class="j-hud">
+        <span class="j-rec" aria-hidden="true">&#9679; REC</span>
+        <span class="j-focus" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="j-zoom" aria-hidden="true">W <b><i></i></b> T</span>
+        <span class="j-date stamp" aria-hidden="true">'23 10 29</span>
+        <span class="j-hint" aria-hidden="true">SCROLL &#9660;</span>
+        <button class="j-sound" type="button" aria-pressed="false" aria-label="sound">&#9834; OFF</button>
+        <a class="j-credit" href="https://music.apple.com/us/album/pink-white/1146195596?i=1146195714&amp;uo=4" target="_blank" rel="noopener" hidden>&#9834; Pink + White &mdash; Frank Ocean</a>
       </div>
       <button class="j-focus-btn hud-btn big">&#9673; FOCUS</button>
       <div class="j-focusmode">
@@ -184,6 +187,7 @@
   <script src="guestbook-api.js?v=1"></script>
   <script src="script.js?v=6"></script>
   <script src="booth.js?v=6"></script>
-  <script type="module" src="journey.js?v=21"></script>
+  <script src="soundtrack.js?v=1"></script>
+  <script type="module" src="journey.js?v=22"></script>
 </body>
 </html>

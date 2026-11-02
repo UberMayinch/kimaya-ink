@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>kimaya · sound test</title>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../style.css?v=6">
+  <link rel="stylesheet" href="../soundtrack.css?v=1">
+  <style>
+    body { padding: 24px; max-width: 760px; margin: 0 auto; font-family: var(--mono); font-size: 22px; }
+    .screen { position: relative; height: 180px; background: #000; margin-bottom: 20px; overflow: hidden; }
+    .screen .veil { position: absolute; inset: 0; background: #000; opacity: 0; }
+    .j-hud { z-index: 1; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 14px 0; }
+    input[type=range] { width: 100%; accent-color: var(--hud); }
+    button.t { font: inherit; color: var(--ink); background: none; border: 1px solid var(--ink); padding: 2px 12px; cursor: pointer; }
+    button.t:hover { color: var(--hud); border-color: var(--hud); }
+    button.t[aria-pressed=true] { color: var(--hud); border-color: var(--hud); }
+    pre { font: inherit; font-size: 18px; color: var(--hud); white-space: pre-wrap; margin: 0; }
+    .meter { height: 8px; border: 1px solid var(--ink); }
+    .meter i { display: block; height: 100%; width: 0; background: var(--hud); }
+    label { color: var(--hud); }
+    input[type=text] { font: inherit; width: 100%; background: none; color: var(--ink); border: 1px solid var(--ink); padding: 2px 8px; }
+    .fine { color: #888; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <div class="screen">
+    <div class="veil" id="veil"></div>
+    <div class="j-hud">
+      <button class="j-sound" type="button" aria-pressed="false" aria-label="sound">&#9834; OFF</button>
+      <a class="j-credit" href="https://music.apple.com/us/album/pink-white/1146195596?i=1146195714&amp;uo=4" target="_blank" rel="noopener" hidden>&#9834; Pink + White &mdash; Frank Ocean</a>
+    </div>
+  </div>
+
+  <label for="p">progress <span id="pv">0.000</span> · <span id="beat"></span></label>
+  <input id="p" type="range" min="0" max="1" step="0.001" value="0">
+  <div class="row">
+    <button class="t" id="sweep">&#9654; SWEEP 0&rarr;1 (60 s)</button>
+    <label><input type="checkbox" id="auto" checked> auto cues (shutter at black, beep at focus)</label>
+  </div>
+
+  <div class="row">
+    <button class="t" data-cue="shutter">SHUTTER</button>
+    <button class="t" data-cue="beep">BEEP</button>
+    <button class="t" data-cue="charge">CHARGE</button>
+    <button class="t" data-cue="power">POWER</button>
+    <button class="t" id="duck" aria-pressed="false">DUCK (fake song preview)</button>
+    <button class="t" id="mute" aria-pressed="false">MUTE</button>
+  </div>
+
+  <div class="row">
+    <button class="t" data-src="song" aria-pressed="true">BED: PREVIEW</button>
+    <button class="t" data-src="synth" aria-pressed="false">BED: PROCEDURAL</button>
+    <label><input type="checkbox" id="whirr"> shutter whirr</label>
+  </div>
+
+  <div class="row" style="display:block">
+    <label for="url">load(url) — a licensed file, same origin or CORS-enabled</label>
+    <div class="row"><input type="text" id="url" placeholder="../assets/track.mp3"><button class="t" id="load">LOAD</button></div>
+  </div>
+
+  <div class="meter"><i id="lvl"></i></div>
+  <pre id="state"></pre>
+
+  <div class="row">
+    <button class="t" id="render">RENDER PROCEDURAL BED + CUES &rarr; WAV</button>
+    <span class="fine">offline, nothing plays; downloads a 60 s sweep</span>
+  </div>
+
+  <script src="../soundtrack.js?v=1"></script>
+  <script>
+    const S = window.KimayaSound;
+    const $ = (id) => document.getElementById(id);
+    const range = $("p");
+    let wasBlack = false, wasLocked = false;
+
+    function beatName(p) {
+      const b = S.beats;
+      const names = [["start", 0], ["face", b.face], ["eye", b.eye], ["pupil", b.pupil], ["front", b.front], ["lens", b.lens], ["back", b.back]];
+      let n = "start";
+      for (const [k, v] of names) if (p >= v) n = k;
+      return n;
+    }
+
+    function set(p) {
+      const m = S.mixAt(p);
+      S.setProgress(p, { black: m.black });
+      $("veil").style.opacity = m.black;
+      $("pv").textContent = p.toFixed(3);
+      $("beat").textContent = beatName(p);
+      if ($("auto").checked) {
+        const black = m.black > 0.97, locked = (p > S.beats.face && p < S.beats.pupil) || p > S.beats.back;
+        if (black && !wasBlack) S.cue("shutter");
+        if (locked && !wasLocked) S.cue("beep");
+        wasBlack = black; wasLocked = locked;
+      }
+    }
+    range.addEventListener("input", () => set(+range.value));
+
+    let sweepRaf = 0;
+    $("sweep").addEventListener("click", () => {
+      cancelAnimationFrame(sweepRaf);
+      const t0 = performance.now();
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / 60000);
+        range.value = p; set(p);
+        if (p < 1) sweepRaf = requestAnimationFrame(step);
+      };
+      sweepRaf = requestAnimationFrame(step);
+    });
+
+    document.querySelectorAll("[data-cue]").forEach((b) => b.addEventListener("click", () => {
+      if (!S.isOn()) S.start();
+      S.cue(b.dataset.cue);
+    }));
+    document.querySelectorAll("[data-src]").forEach((b) => b.addEventListener("click", () => {
+      S.useSource(b.dataset.src);
+      document.querySelectorAll("[data-src]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    }));
+    $("whirr").addEventListener("change", (e) => S.configure({ shutterWhirr: e.target.checked }));
+
+    let ducking = false;
+    $("duck").addEventListener("click", (e) => {
+      ducking = !ducking;
+      e.target.setAttribute("aria-pressed", ducking);
+      window.dispatchEvent(new CustomEvent("kimaya:song", { detail: { state: ducking ? "playing" : "paused" } }));
+    });
+    let muted = false;
+    $("mute").addEventListener("click", (e) => {
+      muted = !muted;
+      e.target.setAttribute("aria-pressed", muted);
+      S.setMuted(muted);
+    });
+
+    $("load").addEventListener("click", async () => {
+      const url = $("url").value.trim();
+      if (!url) return;
+      try { if (!S.isOn()) S.start(); const d = await S.load(url); alert(`loaded ${d.toFixed(1)} s`); }
+      catch (e) { alert("load failed: " + e.message); }
+    });
+
+    $("render").addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      const T = 60;
+      const buf = await S.render({
+        seconds: T,
+        progress: (t) => t / T,
+        cues: [{ t: 1, name: "power" }],
+      });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(S.toWav(buf));
+      a.download = "kimaya-sweep.wav";
+      a.click();
+      e.target.disabled = false;
+    });
+
+    (function tick() {
+      requestAnimationFrame(tick);
+      const db = S.meter();
+      $("lvl").style.width = `${Math.max(0, Math.min(100, (db + 60) / 60 * 100))}%`;
+      const st = S.state();
+      const m = S.mixAt(st.progress);
+      $("state").textContent =
+        `on ${st.on}  source ${st.source}  song ${st.song}  ducked ${st.ducked}  muted ${st.muted}\n` +
+        `out ${isFinite(db) ? db.toFixed(1) : "-inf"} dBFS rms\n` +
+        `mix lp ${Math.round(m.lp)} Hz  wet ${m.wet.toFixed(2)}  lvl ${m.lvl.toFixed(2)}  slow ${m.slow.toFixed(2)}  warm ${m.warm.toFixed(1)} dB  air ${m.air.toFixed(1)} dB  black ${m.black.toFixed(2)}\n` +
+        `beats ${JSON.stringify(S.beats)}`;
+    })();
+    set(0);
+  </script>
+</body>
+</html>

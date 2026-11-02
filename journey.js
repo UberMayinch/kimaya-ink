@@ -1029,6 +1029,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, stickerImg, fig, figBuf) {
       }
     } else {
       // the screen is the flash: hold white so it actually lights the face, then grab
+      window.KimayaSound?.cue("shutter");
       flashT = 1;
       white?.classList.add("on");
       await wait(220);
@@ -1192,6 +1193,9 @@ function init(THREE, RoundedBoxGeometry, photoImg, stickerImg, fig, figBuf) {
   };
 
   let target = 0, prog = 0, frameNo = 0, flashT = 0, dirty = true;
+  const sound = { black: null, locked: null }; // sound: edge state for cues
+  // sound: mix beat points, keep in step with keys[] in buildPath()
+  window.KimayaSound?.configure({ beats: { face: 0.3, eye: 0.56, pupil: 0.74, front: 0.745, lens: 0.885, back: 0.89 } });
   const curPos = V3(), curLook = V3(), lcdPos = V3(), lcdLook = V3(), mixLook = V3();
 
   const pinned = new URLSearchParams(location.search).get("p"); // dev: ?p=0.5 freezes the journey
@@ -1244,7 +1248,16 @@ function init(THREE, RoundedBoxGeometry, photoImg, stickerImg, fig, figBuf) {
 
     if (hud.zoom) hud.zoom.style.width = `${Math.round(Math.min(p / STUDIO_AT, 1) * 100)}%`;
     if (hud.hint) hud.hint.hidden = p > 0.02;
-    if (hud.brackets) hud.brackets.classList.toggle("locked", (p > 0.3 && p < 0.7) || (p > 0.76 && p < 0.86));
+    const locked = (p > 0.3 && p < 0.7) || (p > 0.76 && p < 0.86);
+    if (hud.brackets) hud.brackets.classList.toggle("locked", locked);
+
+    // sound: mix follows progress + real screen blackness; shutter on each black cut, beep on focus lock
+    const blackNow = post.uniforms.uBlack.value;
+    window.KimayaSound?.setProgress(calm ? 1 : p, { black: calm ? 0 : blackNow });
+    if (blackNow > 0.97 && sound.black === false) window.KimayaSound?.cue("shutter");
+    if (locked && sound.locked === false) window.KimayaSound?.cue("beep");
+    sound.black = blackNow > 0.97;
+    sound.locked = locked;
     journey.classList.toggle("at-end", p > 0.95);
   }
 

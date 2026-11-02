@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=31";
-import { createInput } from "./experience/input.js?v=31";
-import { createPortrait } from "./experience/portrait.js?v=31";
-import { createCameraWorld } from "./experience/camera-world.js?v=31";
-import { createArchive } from "./experience/archive.js?v=31";
-import { createPost } from "./experience/post.js?v=31";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=31";
+import { createController, stateAt, R } from "./experience/controller.js?v=32";
+import { createInput } from "./experience/input.js?v=32";
+import { createPortrait } from "./experience/portrait.js?v=32";
+import { createCameraWorld } from "./experience/camera-world.js?v=32";
+import { createArchive } from "./experience/archive.js?v=32";
+import { createPost } from "./experience/post.js?v=32";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=32";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -231,27 +231,28 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     archive.onAction(action, hit);
   }
 
-  // below the hero: once a lap has landed back on the photograph (or the ↓ was pressed) the page
-  // takes wheel-down at the start. that scroll fades the photograph to black under the title and
-  // brings the wish up beneath it. scrolling back up, a tap on her eye, the keys or NEXT go in again.
+  // below the hero: the wheel only ever moves the journey. the ↓ on the photograph is the one way
+  // down: it unlocks the page and scrolls it, which fades the photograph to black under the title
+  // and brings the wish up beneath it. back at the top the page locks again.
   let released = false;
   const below = () => scrollY > 1;
+  function release(on) {
+    if (released === on) return;
+    released = on;
+    journey.classList.toggle("released", on);
+    document.body.classList.toggle("j-released", on);
+  }
   function onScroll() {
     const k = clamp(scrollY / innerHeight, 0, 1);
     journey.style.setProperty("--fade", k.toFixed(3));
     journey.classList.toggle("below", k > 0.02);
+    if (k <= 0.001) release(false);
   }
   addEventListener("scroll", onScroll, { passive: true });
-  const atStart = () => ctrl.p < 0.005 && !ctrl.flying && !archive.isOpen();
-  function release() {
-    if (released) return;
-    released = true;
-    journey.classList.add("released");
-    document.body.classList.add("j-released");
-  }
   journey.querySelector(".j-down")?.addEventListener("click", (e) => {
     e.stopPropagation();
-    release();
+    if (archive.isOpen() || ctrl.flying) return;
+    release(true);
     scrollTo({ top: innerHeight, behavior: calm ? "auto" : "smooth" });
   });
   // "record a wish" on the black: back up, dive into the camera, land on the leave-a-memory screen
@@ -272,10 +273,8 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
   }
 
   const input = createInput(pin, {
-    passWheel(dy) {
-      if (archive.isOpen()) return false;
-      if (scrollY > 0) return true; // the page is already below the hero
-      return released && dy > 0 && atStart();
+    passWheel() {
+      return !archive.isOpen() && below(); // only while already down: the page scrolls back up
     },
     onNudge(dp, src) {
       if (archive.isOpen() || pinned !== null || below()) return;
@@ -562,7 +561,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     }
 
     const { moving, dp } = ctrl.tick(dt, now);
-    if (ctrl.C.wrapped) { orbitP.yaw = orbitP.pitch = orbitC.yaw = orbitC.pitch = 0; parallax.x = parallax.y = 0; release(); }
+    if (ctrl.C.wrapped) { orbitP.yaw = orbitP.pitch = orbitC.yaw = orbitC.pitch = 0; parallax.x = parallax.y = 0; }
     const blending = archive.tick(dt);
     lastP = ctrl.p;
     landWish();

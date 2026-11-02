@@ -1,11 +1,13 @@
 // scroll journey:
-//   kimaya gripping a digicam pointed at us -> she lowers it -> her face -> her eyes ->
-//   into the pupil -> (cut) the camera's front, as she sees it -> into its small top lamp ->
-//   (cut) out the other side: the camera's back, whose LCD is the gallery. FOCUS to hold it.
+//   kimaya (sculpted, not photographed) holding a digicam up at us -> she lowers it -> her face ->
+//   her eyes -> into the pupil -> (cut) the camera's front, as she sees it -> into its small
+//   top lamp -> (cut) out the other side: the camera's back, whose LCD is the gallery and the
+//   booth. FOCUS hands you the camera; its own buttons drive it.
 //
-// one art process for everything: physically lit from afar, and the closer you get the more
-// every surface (photo, hand, metal) breaks into facets. facets are anchored to the surface
-// and sized by real magnification (screen pixels per 0.01 world units), then one paint pass.
+// one art process for everything: smooth and physically lit from afar, and the closer you get
+// the more every surface (skin, hair, metal, room) breaks into facets. facets are anchored to
+// the surface and sized by real magnification (screen px per 0.01 world units). one paint pass.
+// the figure is meshed offline by tools/sculpt.mjs.
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -13,13 +15,14 @@ const pin = journey.querySelector(".journey-pin");
 try {
   const THREE = await import("three");
   const { RoundedBoxGeometry } = await import("three/addons/geometries/RoundedBoxGeometry.js");
-  const [photo, depth, hand] = await Promise.all([
+  const [photo, sticker, fig, figBuf] = await Promise.all([
     loadImage("assets/kimaya.jpg"),
-    loadImage("assets/kimaya-depth.png"),
-    loadImage("assets/hand.png"),
+    loadImage("assets/sticker.png"),
+    fetch("assets/figure.json").then((r) => r.json()),
+    fetch("assets/figure.bin").then((r) => r.arrayBuffer()),
   ]);
   await document.fonts.load('30px "VT323"').catch(() => {});
-  init(THREE, RoundedBoxGeometry, photo, depth, hand);
+  init(THREE, RoundedBoxGeometry, photo, sticker, fig, figBuf);
   journey.classList.add("live");
 } catch (err) {
   console.warn("[journey] falling back to still:", err);
@@ -36,32 +39,11 @@ function loadImage(src) {
   });
 }
 
-function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
+function init(THREE, RoundedBoxGeometry, photoImg, stickerImg, fig, figBuf) {
   const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const { smootherstep, lerp, clamp } = THREE.MathUtils;
   const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-
-  // ---------- photo space: 1600x860 image, 100 px per world unit ----------
-
-  const TEX = new THREE.Vector2(1600, 860);
-  const PW = 16, PH = 8.6, DS = 1.6;
-  const px = (x, y) => new THREE.Vector2(x / TEX.x, 1 - y / TEX.y);
-  const EYE = px(713, 317);
-  const FACE = px(650, 430);
-  const BETWEEN = px(630, 330);
-
-  const dc = document.createElement("canvas");
-  dc.width = depthImg.width;
-  dc.height = depthImg.height;
-  const dctx = dc.getContext("2d");
-  dctx.drawImage(depthImg, 0, 0);
-  const dpx = dctx.getImageData(0, 0, dc.width, dc.height).data;
-  const depthAt = (uv) => {
-    const x = clamp(Math.round(uv.x * (dc.width - 1)), 0, dc.width - 1);
-    const y = clamp(Math.round((1 - uv.y) * (dc.height - 1)), 0, dc.height - 1);
-    return dpx[(y * dc.width + x) * 4] / 255;
-  };
-  const world = (uv) => V3((uv.x - 0.5) * PW, (uv.y - 0.5) * PH, depthAt(uv) * DS);
+  const VA = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 
   const tex = (img, srgb = true) => {
     const t = new THREE.Texture(img);
@@ -79,21 +61,23 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   const scene = new THREE.Scene();
   const FOV = 35;
   const T = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
-  const view = new THREE.PerspectiveCamera(FOV, 1, 0.004, 200);
+  const view = new THREE.PerspectiveCamera(FOV, 1, 0.004, 300);
 
-  // environment = her own room, so the silver reflects the photo it sits in
+  // environment = her own room, so skin and silver pick up its pastel light
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envSrc = tex(photoImg);
   envSrc.mapping = THREE.EquirectangularReflectionMapping;
   scene.environment = pmrem.fromEquirectangular(envSrc).texture;
-  scene.environmentIntensity = 1.15;
+  scene.environmentIntensity = 0.9;
 
-  const key = new THREE.DirectionalLight(0xffe2c4, 1.6);
-  key.position.set(-4, 6, 8);
+  const key = new THREE.DirectionalLight(0xffe0c2, 2.2);
+  key.position.set(-5, 6, 9);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0xff9b6a, 1.2);
-  rim.position.set(7, 2, -5);
+  const rim = new THREE.DirectionalLight(0xff9466, 2.4); // the warm mielgo edge
+  rim.position.set(8, 3, -6);
   scene.add(rim);
+  const fill = new THREE.HemisphereLight(0xbfe6ff, 0x7a5a50, 0.5);
+  scene.add(fill);
 
   const shared = {
     uShard: { value: 1 },         // global on/off (focus mode turns it off)
@@ -108,7 +92,11 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
       p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
       return fract(sin(p) * 43758.5453);
     }
-    // voronoi: seed (same units as p), edge metric, cell random
+    vec3 shHash3(vec3 p) {
+      p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+      return fract(sin(p) * 43758.5453);
+    }
+    // 2d voronoi: seed (same units as p), edge metric, cell random
     vec4 shVoro(vec2 p, float cell) {
       vec2 g = p / cell, i = floor(g), f = fract(g);
       float d1 = 8.0, d2 = 8.0; vec2 best = vec2(0.0), id = vec2(0.0);
@@ -124,154 +112,104 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
       }
       return vec4(best, sqrt(d2) - sqrt(d1), shHash(id + 7.0).x);
     }
+    // 3d voronoi for curved, organic surfaces: cell random (xyz), edge metric
+    vec4 shVoro3(vec3 p, float cell) {
+      vec3 g = p / cell, i = floor(g), f = fract(g);
+      float d1 = 8.0, d2 = 8.0; vec3 id = vec3(0.0);
+      for (int z = -1; z <= 1; z++) {
+        for (int y = -1; y <= 1; y++) {
+          for (int x = -1; x <= 1; x++) {
+            vec3 o = vec3(float(x), float(y), float(z));
+            vec3 r = o + shHash3(i + o) * 0.9 + 0.05 - f;
+            float d = dot(r, r);
+            if (d < d1) { d2 = d1; d1 = d; id = i + o; }
+            else if (d < d2) { d2 = d; }
+          }
+        }
+      }
+      return vec4(shHash3(id + 7.0), sqrt(d2) - sqrt(d1));
+    }
     // magnification: screen pixels per 0.01 world units
     float shPPT(vec3 viewPos) {
       float wpp = max(length(dFdx(viewPos)), length(dFdy(viewPos)));
       return 0.01 / max(wpp, 1e-7);
     }
-    float shAmount(float ppt) { return max(uShardFloor, smoothstep(1.3, 4.5, ppt)) * uShard; }
-    // cells are 0.09 units (9 photo px) and split in two each time magnification doubles
+    float shAmount(float ppt, float floorMul) { return max(uShardFloor * floorMul, smoothstep(1.3, 4.5, ppt)) * uShard; }
+    // cells are 0.09 units and split in two each time magnification doubles
     float shCell(float ppt) { return 0.09 / exp2(floor(clamp(log2(ppt / 8.0), 0.0, 5.0))); }
   `;
 
-  // ---------- painted cards: the photo (displaced) and her hand ----------
-
-  function card({ img, w, h, depthTex = null, iris = false, transparent = false }) {
-    const uniforms = {
-      ...shared,
-      uMap: { value: tex(img) },
-      uSize: { value: new THREE.Vector2(w, h) },
-      uDepth: { value: depthTex },
-      uDS: { value: DS },
-      uEye: { value: EYE },
-      uIris: { value: 0 },
-      uDive: { value: 0 },
-    };
-    const defines = {};
-    if (depthTex) defines.DEPTH = "";
-    if (iris) defines.IRIS = "";
-    const mat = new THREE.ShaderMaterial({
-      uniforms,
-      defines,
-      transparent,
-      depthWrite: !transparent,
-      vertexShader: /* glsl */ `
-        uniform sampler2D uDepth; uniform float uDS;
-        varying vec2 vUv; varying vec3 vView;
-        void main() {
-          vUv = uv;
-          vec3 p = position;
-          #ifdef DEPTH
-            p.z += texture2D(uDepth, uv).r * uDS;
-          #endif
-          vec4 mv = modelViewMatrix * vec4(p, 1.0);
-          vView = mv.xyz;
-          gl_Position = projectionMatrix * mv;
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform sampler2D uMap; uniform vec2 uSize, uEye; uniform float uIris, uDive;
-        varying vec2 vUv; varying vec3 vView;
-        ${SHARD}
-
-        vec4 facet(vec2 p, float cell) {
-          vec4 v = shVoro(p, cell);
-          vec4 c = texture2D(uMap, v.xy / uSize + 0.5);
-          vec2 tilt = shHash(v.xy * 13.1 + cell) - 0.5;
-          float lit = dot(normalize(vec3(tilt * 0.55, 1.0)), normalize(vec3(-0.5, 0.6, 0.65)));
-          c.rgb *= 0.86 + 0.24 * lit;
-          c.rgb *= mix(0.75, 1.0, smoothstep(0.0, 0.1, v.z));
-          return c;
-        }
-
-        #ifdef IRIS
-        // faceted iris over the tiny real one, octagonal pupil
-        vec4 iris(vec2 d) {
-          const float RI = 10.5, RP = 3.9;
-          float r = length(d), rn = min(r / RI, 1.0);
-          float a = atan(d.y, d.x);
-          float h = shHash(vec2(floor((a / 6.2831853 + 0.5) * 44.0), floor(rn * 7.0))).x;
-          vec3 c = mix(vec3(0.14, 0.07, 0.03), vec3(0.66, 0.40, 0.15), h * (1.0 - rn) * 0.85 + 0.12);
-          c += vec3(0.28, 0.17, 0.06) * (1.0 - smoothstep(0.0, 0.07, abs(rn - 0.52)));
-          c *= mix(1.0, 0.3, smoothstep(0.78, 1.0, rn));
-          vec2 q = abs(d);
-          float oct = max(max(q.x, q.y), (q.x + q.y) * 0.70710678);
-          float aa = fwidth(oct) + 0.02;
-          c = mix(c, vec3(0.006, 0.008, 0.012), 1.0 - smoothstep(RP - aa, RP + aa, oct));
-          float cl = max(abs(d.x + 2.5), abs(d.y - 2.2));
-          c = mix(c, vec3(0.96, 0.94, 0.9), (1.0 - smoothstep(1.1 - fwidth(cl), 1.1 + fwidth(cl), cl)) * 0.9);
-          float lids = 1.0 - smoothstep(0.9, 1.0, length((d - vec2(0.0, -1.0)) / vec2(30.0, 9.5)));
-          float edge = fwidth(r) + 0.3;
-          // clamp before pow: a negative channel would become NaN and poison the mix even at alpha 0
-          return vec4(pow(max(c, 0.0), vec3(2.2)), (1.0 - smoothstep(RI - edge, RI + edge, r)) * max(lids, uDive));
-        }
-        #endif
-
-        void main() {
-          vec2 p = (vUv - 0.5) * uSize; // world units on the card
-          vec4 col = texture2D(uMap, vUv);
-          float ppt = shPPT(vView);
-          float k = shAmount(ppt);
-          if (k > 0.001) {
-            float lv = clamp(log2(ppt / 8.0), 0.0, 5.0);
-            float cA = 0.09 / exp2(floor(lv));
-            vec4 s = mix(facet(p, cA), facet(p, cA * 0.5), smoothstep(0.55, 1.0, fract(lv)));
-            col = mix(col, s, k);
-          }
-          #ifdef IRIS
-            if (uIris > 0.0) {
-              vec4 ir = iris((vUv - uEye) * vec2(1600.0, 860.0));
-              if (ir.a > 0.0) col.rgb = mix(col.rgb, ir.rgb, ir.a * uIris);
-            }
-          #endif
-          if (col.a < 0.02) discard;
-          gl_FragColor = col;
-        }
-      `,
-    });
-    return new THREE.Mesh(new THREE.PlaneGeometry(w, h, depthTex ? 160 : 1, depthTex ? 86 : 1), mat);
-  }
-
-  const portrait = card({ img: photoImg, w: PW, h: PH, depthTex: tex(depthImg, false), iris: true });
-  scene.add(portrait);
-  const P = portrait.material.uniforms;
-
-  // ---------- the digicam: physical silver with facets injected ----------
-
-  function metal(params, { facets = true } = {}) {
+  // physical material + facets. facets: "2d" for flat-faced hard surfaces, "3d" for skin/hair.
+  // positions are taken in object space times the object's scale, so facets stick to the surface
+  // and keep one world size whether the camera is held small or shown big.
+  function metal(params, { facets = "2d", floor = 1, iris = false } = {}) {
     const m = new THREE.MeshPhysicalMaterial(params);
-    m.userData.objScale = { value: 1 };
     if (!facets) return m;
+    m.defines = { ...(m.defines || {}), [facets === "3d" ? "FACET3D" : "FACET2D"]: "", ...(iris ? { IRIS: "" } : {}) };
     m.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, shared, { uObjScale: m.userData.objScale });
+      Object.assign(sh.uniforms, shared, { uFloorMul: { value: floor } });
       sh.vertexShader = sh.vertexShader
-        .replace("#include <common>", "#include <common>\nvarying vec3 vShP; varying vec3 vShN;")
-        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvShP = transformed; vShN = objectNormal;");
+        .replace("#include <common>", "#include <common>\nvarying vec3 vShP; varying vec3 vShN; varying vec3 vShO;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvShO = transformed; vShP = transformed * length(modelMatrix[0].xyz); vShN = objectNormal;");
       sh.fragmentShader = sh.fragmentShader
-        .replace("#include <common>", `#include <common>\nvarying vec3 vShP; varying vec3 vShN; uniform float uObjScale;\n${SHARD}`)
+        .replace("#include <common>", `#include <common>\nvarying vec3 vShP; varying vec3 vShN; varying vec3 vShO; uniform float uFloorMul;\n${SHARD}`)
+        .replace(
+          "#include <color_fragment>",
+          /* glsl */ `#include <color_fragment>
+          #ifdef IRIS
+          {
+            // faceted brown iris and an octagonal pupil on the eyeball's front (+z)
+            vec3 q = normalize(vShO);
+            if (q.z > 0.0) {
+              const float RI = 0.42, RP = 0.15;
+              vec2 d = q.xy;
+              float r = length(d), rn = min(r / RI, 1.0);
+              float a = atan(d.y, d.x);
+              float h = shHash(vec2(floor((a / 6.2831853 + 0.5) * 44.0), floor(rn * 7.0))).x;
+              vec3 c = mix(vec3(0.14, 0.07, 0.03), vec3(0.66, 0.40, 0.15), h * (1.0 - rn) * 0.85 + 0.12);
+              c += vec3(0.28, 0.17, 0.06) * (1.0 - smoothstep(0.0, 0.07, abs(rn - 0.52)));
+              c *= mix(1.0, 0.3, smoothstep(0.78, 1.0, rn));
+              vec2 ab = abs(d);
+              float oct = max(max(ab.x, ab.y), (ab.x + ab.y) * 0.70710678);
+              float aa = fwidth(oct) + 1e-4;
+              c = mix(c, vec3(0.006, 0.008, 0.012), 1.0 - smoothstep(RP - aa, RP + aa, oct));
+              float e = fwidth(r) + 0.004;
+              diffuseColor.rgb = mix(diffuseColor.rgb, pow(max(c, 0.0), vec3(2.2)), 1.0 - smoothstep(RI - e, RI + e, r));
+            }
+          }
+          #endif`
+        )
         .replace(
           "#include <normal_fragment_maps>",
           /* glsl */ `#include <normal_fragment_maps>
           {
             float ppt = shPPT(-vViewPosition);
-            float k = shAmount(ppt);
+            float k = shAmount(ppt, uFloorMul);
             if (k > 0.001) {
-              vec3 an = abs(vShN);
-              vec2 sp = (an.z > max(an.x, an.y) ? vShP.xy : an.y > an.x ? vShP.xz : vShP.yz) * uObjScale;
-              vec4 v = shVoro(sp, shCell(ppt));
-              vec2 tilt = shHash(v.xy * 13.1) - 0.5;
-              normal = normalize(normal + vec3(tilt * 0.6, 0.0) * k);
-              diffuseColor.rgb *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.1, v.z)), k);
+              #ifdef FACET3D
+                vec4 v = shVoro3(vShP, shCell(ppt));
+                normal = normalize(normal + (v.xyz - 0.5) * 0.7 * k);
+                diffuseColor.rgb *= mix(1.0, mix(0.78, 1.0, smoothstep(0.0, 0.1, v.w)) * (0.92 + 0.16 * v.x), k);
+              #else
+                vec3 an = abs(vShN);
+                vec2 sp = an.z > max(an.x, an.y) ? vShP.xy : an.y > an.x ? vShP.xz : vShP.yz;
+                vec4 v = shVoro(sp, shCell(ppt));
+                vec2 tilt = shHash(v.xy * 13.1) - 0.5;
+                normal = normalize(normal + vec3(tilt * 0.6, 0.0) * k);
+                diffuseColor.rgb *= mix(1.0, mix(0.7, 1.0, smoothstep(0.0, 0.1, v.z)), k);
+              #endif
             }
           }`
         );
     };
+    m.customProgramCacheKey = () => `kimaya-${facets}-${iris}`;
     return m;
   }
 
   const M = {
     silver: metal({ color: 0xd4d6dc, metalness: 1, roughness: 0.3, anisotropy: 0.6, clearcoat: 0.35, clearcoatRoughness: 0.2 }),
     satin: metal({ color: 0x9aa0ac, metalness: 1, roughness: 0.42 }),
+    bright: metal({ color: 0xe4e6ea, metalness: 1, roughness: 0.22 }),
     chrome: metal({ color: 0xf2f2f4, metalness: 1, roughness: 0.1 }),
     black: metal({ color: 0x0c0d10, metalness: 0, roughness: 0.38, clearcoat: 0.5 }),
     glass: metal({ color: 0x020305, metalness: 0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02 }),
@@ -279,90 +217,28 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     flash: metal({ color: 0xe9e7e0, metalness: 0, roughness: 0.18, clearcoat: 1, emissive: 0x000000 }),
     lamp: metal({ color: 0x1a0d06, metalness: 0.2, roughness: 0.05, clearcoat: 1 }),
     led: metal({ color: 0x0a3a1a, emissive: new THREE.Color(0x1aff6a), emissiveIntensity: 0.4 }, { facets: false }),
+    skin: metal({ vertexColors: true, roughness: 0.52, sheen: 0.5, sheenColor: new THREE.Color(0xff9a80), sheenRoughness: 0.55, clearcoat: 0.12, clearcoatRoughness: 0.5 }, { facets: "3d", floor: 0.55 }),
+    hair: metal({ vertexColors: true, roughness: 0.55, sheen: 0.7, sheenColor: new THREE.Color(0x9a6a6e), sheenRoughness: 0.4, clearcoat: 0.08, clearcoatRoughness: 0.4 }, { facets: "3d", floor: 0.8 }),
+    eye: metal({ color: 0xe9e3dc, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02 }, { facets: "3d", floor: 0.3, iris: true }),
   };
+
+  // ---------- the digicam (built twice: small in her hand, big in the studio) ----------
 
   const CW = 3.4, CH = 2.0, CD = 0.72, FRONT = CD / 2;
-  const SCALE = 1.62;
-  const objScaled = [];
-
-  const rig = new THREE.Group(); // camera + her hand, moves as one
-  const cam = new THREE.Group(); // the camera, scaled
-  cam.scale.setScalar(SCALE);
-  rig.add(cam);
-  scene.add(rig);
-
-  const add = (geo, mat, x = 0, y = 0, z = 0, parent = cam) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    parent.add(m);
-    if (mat.userData.objScale) objScaled.push(mat);
-    return m;
-  };
+  const lcd = makeLCD();
   const disc = (r, h, segs = 64) => new THREE.CylinderGeometry(r, r, h, segs).rotateX(Math.PI / 2);
   const ring = (r0, r1, segs = 64) => new THREE.RingGeometry(r0, r1, segs);
 
-  // body: a slab with soft edges and a parting seam
-  add(new RoundedBoxGeometry(CW, CH, CD, 10, 0.32), M.silver);
-  add(new RoundedBoxGeometry(CW + 0.004, CH + 0.004, 0.02, 4, 0.01), M.black, 0, 0, -0.12);
-
-  // lens, on the side away from her fingers: plate with printed ring, telescoping barrels, octagon glass
-  const LX = -0.78, LY = -0.04;
-  const lens = new THREE.Group();
-  lens.position.set(LX, LY, FRONT);
-  cam.add(lens);
-  add(disc(0.92, 0.05), M.satin, 0, 0, 0.025, lens);
-  add(ring(0.66, 0.9), printedRing(), 0, 0, 0.052, lens);
-  add(disc(0.66, 0.2), M.silver, 0, 0, 0.1, lens);
-  add(disc(0.57, 0.34), M.satin, 0, 0, 0.17, lens);
-  add(disc(0.49, 0.48), M.silver, 0, 0, 0.24, lens);
-  add(new THREE.TorusGeometry(0.44, 0.045, 16, 64), M.chrome, 0, 0, 0.48, lens);
-  add(disc(0.42, 0.02), M.black, 0, 0, 0.48, lens);
-  add(disc(0.3, 0.02), M.coat, 0, 0, 0.485, lens);
-  add(disc(0.21, 0.02, 8).rotateZ(Math.PI / 8), M.glass, 0, 0, 0.49, lens);
-
-  // flash window, the small top lamp (our second way in), mic holes, name, specs
-  add(new RoundedBoxGeometry(0.8, 0.24, 0.05, 3, 0.06), M.flash, 0.55, 0.66, FRONT);
-  add(new RoundedBoxGeometry(0.84, 0.28, 0.03, 3, 0.07), M.chrome, 0.55, 0.66, FRONT - 0.005);
-  const LAMP_LOCAL = V3(-0.02, 0.68, FRONT + 0.035);
-  add(new THREE.TorusGeometry(0.075, 0.018, 12, 32), M.chrome, LAMP_LOCAL.x, LAMP_LOCAL.y, FRONT + 0.02);
-  add(new THREE.SphereGeometry(0.07, 24, 16), M.lamp, LAMP_LOCAL.x, LAMP_LOCAL.y, FRONT + 0.005);
-  [-0.06, 0.06].forEach((dx) => add(new THREE.SphereGeometry(0.018, 8, 6), M.black, LX + 0.62 + dx, -0.82, FRONT - 0.005));
-  add(new THREE.PlaneGeometry(1.0, 0.28), printed("kimaya", 96, "#40445a", "italic"), 0.95, 0.05, FRONT + 0.002);
-  add(new THREE.PlaneGeometry(0.8, 0.12), printed("2.0 MEGA PIXELS", 40, "#5a5e70"), 1.0, -0.72, FRONT + 0.002);
-
-  // top: shutter with zoom collar, power button + led
-  add(new THREE.TorusGeometry(0.2, 0.05, 12, 40).rotateX(Math.PI / 2), M.satin, 1.05, CH / 2 + 0.03, 0);
-  add(new THREE.CylinderGeometry(0.15, 0.16, 0.12, 40), M.chrome, 1.05, CH / 2 + 0.05, 0);
-  add(new RoundedBoxGeometry(0.34, 0.06, 0.16, 2, 0.03), M.satin, 0.3, CH / 2 + 0.02, 0.05);
-  add(new THREE.SphereGeometry(0.025, 8, 6), M.led, 0.55, CH / 2 + 0.005, 0.05);
-
-  // back: LCD (the gallery), control pad, buttons
-  const lcd = makeLCD();
-  const LCD_LOCAL = V3(0.52, 0.02, -FRONT - 0.016);
-  add(new RoundedBoxGeometry(2.14, 1.62, 0.02, 3, 0.04), M.black, LCD_LOCAL.x, LCD_LOCAL.y, -FRONT - 0.002);
-  const lcdMesh = add(new THREE.PlaneGeometry(1.96, 1.47), lcd.material, LCD_LOCAL.x, LCD_LOCAL.y, LCD_LOCAL.z);
-  lcdMesh.rotation.y = Math.PI;
-  add(new THREE.TorusGeometry(0.26, 0.06, 12, 40), M.satin, -1.15, -0.28, -FRONT - 0.02);
-  add(disc(0.14, 0.04), M.chrome, -1.15, -0.28, -FRONT - 0.02);
-  [[-1.1, 0.55], [-1.32, 0.55], [-1.2, -0.8]].forEach(([x, y]) =>
-    add(new RoundedBoxGeometry(0.2, 0.14, 0.05, 2, 0.04), M.satin, x, y, -FRONT - 0.01)
-  );
-  add(new RoundedBoxGeometry(0.42, 0.12, 0.05, 2, 0.05), M.black, -1.15, 0.82, -FRONT - 0.01);
-  // strap lug
-  add(new THREE.TorusGeometry(0.07, 0.025, 8, 16).rotateY(Math.PI / 2), M.chrome, -CW / 2 - 0.02, 0.55, 0);
-
-  objScaled.forEach((m) => (m.userData.objScale.value = SCALE));
-
-  function printed(text, size, color, style = "") {
+  function printed(text, size, color, { style = "", w = 512, h = 144 } = {}) {
     const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 144;
+    c.width = w;
+    c.height = h;
     const g = c.getContext("2d");
     g.fillStyle = color;
     g.font = style ? `${style} ${size}px "Instrument Serif", Georgia, serif` : `${size}px "VT323", monospace`;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.fillText(text, 256, 76);
+    g.fillText(text, w / 2, h / 2 + 4);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     return new THREE.MeshPhysicalMaterial({ map: t, transparent: true, metalness: 0, roughness: 0.6, depthWrite: false });
@@ -392,18 +268,168 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     return metal({ map: t, metalness: 0.9, roughness: 0.35 });
   }
 
-  // her hand, cut from the original photo, rides with the camera
-  const handCard = card({ img: handImg, w: 3.7, h: 4.05, transparent: true });
-  rig.add(handCard);
+  // the mode dial's printed face: scene icons around the rim, like the real one
+  function dialFace() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const g = c.getContext("2d");
+    g.fillStyle = "#c9ccd3";
+    g.beginPath();
+    g.arc(128, 128, 128, 0, 7);
+    g.fill();
+    g.fillStyle = "#23252e";
+    g.font = '30px "VT323", monospace';
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    ["SCN", "P", "▣", "EASY", "☺", "♪"].forEach((s, i) => {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      g.fillText(s, 128 + Math.cos(a) * 86, 128 + Math.sin(a) * 86);
+    });
+    g.fillStyle = "#1aa6a0";
+    g.beginPath();
+    g.arc(128, 128, 18, 0, 7);
+    g.fill();
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return metal({ map: t, metalness: 0.7, roughness: 0.35 });
+  }
 
-  // the camera sits where her phone was, in her grip
-  const GRIP = V3(3.95, -1.9, 0.62);
-  // card sits a touch left of where the fingers were, so the palm wraps the body's edge
-  handCard.position.set(5.35 - 0.25 - GRIP.x, -2.275 - GRIP.y, FRONT * SCALE + 0.06);
-  handCard.renderOrder = 2;
-  const HELD = { pos: GRIP, rot: new THREE.Euler(0.04, -0.06, 0.02) };
-  const ASIDE = { pos: V3(10.5, -8.2, 2.4), rot: new THREE.Euler(0.8, -1.1, -0.6) };
-  const STUDIO = { pos: V3(0, 0, 80), rot: new THREE.Euler(0, 0, 0) };
+  function makeCamera(scale) {
+    const cam = new THREE.Group();
+    cam.scale.setScalar(scale);
+    const buttons = [];
+    const add = (geo, mat, x = 0, y = 0, z = 0, parent = cam, action = null) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      parent.add(m);
+      if (action) { m.userData.action = action; buttons.push(m); }
+      return m;
+    };
+
+    // body: a slab with soft edges and a parting seam
+    add(new RoundedBoxGeometry(CW, CH, CD, 10, 0.32), M.silver);
+    add(new RoundedBoxGeometry(CW + 0.004, CH + 0.004, 0.02, 4, 0.01), M.black, 0, 0, -0.12);
+
+    // front, real cyber-shot layout: lens right of centre, flash top-left, the small lamp between
+    const LX = 0.78, LY = -0.04;
+    const lens = new THREE.Group();
+    lens.position.set(LX, LY, FRONT);
+    cam.add(lens);
+    add(disc(0.92, 0.05), M.satin, 0, 0, 0.025, lens);
+    add(ring(0.66, 0.9), printedRing(), 0, 0, 0.052, lens);
+    add(disc(0.66, 0.2), M.silver, 0, 0, 0.1, lens);
+    add(disc(0.57, 0.34), M.satin, 0, 0, 0.17, lens);
+    add(disc(0.49, 0.48), M.silver, 0, 0, 0.24, lens);
+    add(new THREE.TorusGeometry(0.44, 0.045, 16, 64), M.chrome, 0, 0, 0.48, lens);
+    add(disc(0.42, 0.02), M.black, 0, 0, 0.48, lens);
+    add(disc(0.3, 0.02), M.coat, 0, 0, 0.485, lens);
+    add(disc(0.21, 0.02, 8).rotateZ(Math.PI / 8), M.glass, 0, 0, 0.49, lens);
+    const flash = add(new RoundedBoxGeometry(0.8, 0.24, 0.05, 3, 0.06), M.flash, -0.55, 0.64, FRONT);
+    add(new RoundedBoxGeometry(0.84, 0.28, 0.03, 3, 0.07), M.chrome, -0.55, 0.64, FRONT - 0.005);
+    const lampLocal = V3(-0.02, 0.66, FRONT + 0.035);
+    add(new THREE.TorusGeometry(0.075, 0.018, 12, 32), M.chrome, lampLocal.x, lampLocal.y, FRONT + 0.02);
+    add(new THREE.SphereGeometry(0.07, 24, 16), M.lamp, lampLocal.x, lampLocal.y, FRONT + 0.005);
+    [-0.06, 0.06].forEach((dx) => add(new THREE.SphereGeometry(0.018, 8, 6), M.black, 0.14 + dx, -0.84, FRONT - 0.005));
+    add(new THREE.PlaneGeometry(0.9, 0.25), printed("kimaya", 96, "#40445a", { style: "italic" }), -0.5, -0.32, FRONT + 0.002);
+    add(new THREE.PlaneGeometry(0.62, 0.1), printed("2.0 MEGA PIXELS", 40, "#5a5e70"), 1.25, -0.86, FRONT + 0.002);
+    add(new THREE.PlaneGeometry(0.3, 0.16), printed("5x", 90, "#5a5e70"), 1.42, 0.78, FRONT + 0.002);
+
+    // top: shutter with zoom collar at her right hand's end, power + led
+    add(new THREE.TorusGeometry(0.2, 0.05, 12, 40).rotateX(Math.PI / 2), M.satin, -1.05, CH / 2 + 0.03, 0);
+    add(new THREE.CylinderGeometry(0.15, 0.16, 0.12, 40), M.chrome, -1.05, CH / 2 + 0.05, 0, cam, "shutter");
+    add(new RoundedBoxGeometry(0.34, 0.06, 0.16, 2, 0.03), M.satin, -0.3, CH / 2 + 0.02, 0.05);
+    add(new THREE.SphereGeometry(0.025, 8, 6), M.led, -0.55, CH / 2 + 0.005, 0.05);
+
+    // back, after the real one: framed LCD on the left (from behind), the name under it,
+    // zoom rocker, mode dial, play button, control wheel, MENU / HOME on the right
+    const BZ = -FRONT;
+    const back = new THREE.Group();
+    back.position.z = BZ;
+    back.rotation.y = Math.PI; // local +x of the back group = our right when we look at the back
+    cam.add(back);
+    // in back-group coords, x grows to the right as seen from behind
+    add(new RoundedBoxGeometry(2.3, 1.78, 0.04, 3, 0.1), M.bright, -0.52, 0.02, 0.0, back);
+    add(new RoundedBoxGeometry(2.08, 1.56, 0.02, 3, 0.05), M.black, -0.52, 0.06, 0.022, back);
+    const lcdMesh = add(new THREE.PlaneGeometry(1.92, 1.44), lcd.material, -0.52, 0.06, 0.034, back);
+    add(new THREE.PlaneGeometry(0.62, 0.15), printed("kimaya", 90, "#3a3e52", { style: "italic" }), -0.52, -0.78, 0.023, back);
+
+    add(new RoundedBoxGeometry(0.52, 0.17, 0.06, 2, 0.08), M.chrome, 1.12, 0.74, 0.0, back, "zoom");
+    add(new THREE.PlaneGeometry(0.6, 0.1), printed("W        T", 50, "#2d3040"), 1.12, 0.6, 0.01, back);
+    // mode dial: knurled edge + printed face
+    add(new THREE.CylinderGeometry(0.31, 0.31, 0.06, 64).rotateX(Math.PI / 2), M.chrome, 1.08, 0.24, 0.02, back, "rec");
+    add(new THREE.TorusGeometry(0.31, 0.022, 6, 96), M.satin, 1.08, 0.24, 0.05, back);
+    add(new THREE.CircleGeometry(0.27, 48), dialFace(), 1.08, 0.24, 0.054, back, "rec");
+    // play button
+    add(disc(0.085, 0.05), M.chrome, 0.8, -0.12, 0.02, back, "play");
+    add(new THREE.PlaneGeometry(0.14, 0.1), printed("▶", 110, "#2d3040", { w: 160, h: 120 }), 0.8, 0.0, 0.01, back);
+    // control wheel: left / right flip photos, centre = ok
+    add(new THREE.TorusGeometry(0.27, 0.06, 12, 48), M.bright, 1.1, -0.38, 0.03, back, "wheel");
+    add(disc(0.25, 0.04), M.satin, 1.1, -0.38, 0.02, back, "wheel");
+    add(new THREE.PlaneGeometry(0.2, 0.08), printed("DISP", 80, "#2d3040", { w: 256, h: 100 }), 1.1, -0.2, 0.045, back);
+    add(disc(0.09, 0.07), M.chrome, 1.1, -0.38, 0.05, back, "ok");
+    // menu / home
+    add(disc(0.085, 0.05), M.chrome, 0.78, -0.82, 0.02, back, "menu");
+    add(disc(0.085, 0.05), M.chrome, 1.4, -0.82, 0.02, back, "home");
+    add(new THREE.PlaneGeometry(0.42, 0.08), printed("MENU      HOME", 44, "#2d3040"), 1.09, -0.94, 0.01, back);
+    // her sticker, slapped on the corner of the screen frame
+    const stickerMat = new THREE.MeshPhysicalMaterial({ map: tex(stickerImg), transparent: true, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.15, depthWrite: false });
+    const st = add(new THREE.PlaneGeometry(0.62, 0.62), stickerMat, -1.42, 0.62, 0.046, back);
+    st.rotation.z = 0.22;
+    st.renderOrder = 3;
+
+    // strap lug
+    add(new THREE.TorusGeometry(0.07, 0.025, 8, 16).rotateY(Math.PI / 2), M.chrome, CW / 2 + 0.02, 0.55, 0);
+
+    return { group: cam, buttons, lampLocal, lcdMesh, flash, back };
+  }
+
+  // ---------- kimaya, sculpted ----------
+
+  const P = fig.points;
+  const figure = new THREE.Group();
+  scene.add(figure);
+
+  function partGeometry(name) {
+    const p = fig.parts[name];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(figBuf, p.pos, p.vertices * 3), 3));
+    g.setAttribute("normal", new THREE.BufferAttribute(new Int8Array(figBuf, p.nrm, p.vertices * 3), 3, true));
+    // the sculpt writes display colours; three wants linear vertex colours
+    const raw = new Uint8Array(figBuf, p.col, p.vertices * 3);
+    const lin = new Float32Array(raw.length);
+    for (let i = 0; i < raw.length; i++) lin[i] = Math.pow(raw[i] / 255, 2.2);
+    g.setAttribute("color", new THREE.BufferAttribute(lin, 3));
+    g.setIndex(new THREE.BufferAttribute(new Uint32Array(figBuf, p.idx, p.indices), 1));
+    g.computeBoundingSphere();
+    return g;
+  }
+
+  figure.add(new THREE.Mesh(partGeometry("head"), M.skin));
+  figure.add(new THREE.Mesh(partGeometry("body"), M.skin));
+  figure.add(new THREE.Mesh(partGeometry("hair"), M.hair));
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(P.eyeRadius, 48, 32), M.eye);
+  eyeL.position.copy(VA(P.eyeL));
+  const eyeR = eyeL.clone();
+  eyeR.position.copy(VA(P.eyeR));
+  figure.add(eyeL, eyeR);
+
+  // forearm + hand + the small camera swing together about the elbow
+  const ELBOW = VA(P.elbow);
+  const arm = new THREE.Group();
+  arm.position.copy(ELBOW);
+  figure.add(arm);
+  const armMesh = new THREE.Mesh(partGeometry("arm"), M.skin);
+  armMesh.position.copy(ELBOW).negate();
+  arm.add(armMesh);
+  const held = makeCamera(P.camScale);
+  held.group.position.copy(VA(P.camPos)).sub(ELBOW);
+  arm.add(held.group);
+
+  // the studio camera: same object, shown big on its own
+  const STUDIO_SCALE = 1.62;
+  const studioCam = makeCamera(STUDIO_SCALE);
+  studioCam.group.position.set(0, 0, 120);
+  scene.add(studioCam.group);
 
   // ---------- LCD: canvas texture showing the gallery ----------
 
@@ -446,7 +472,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
           // own cache key: an earlier non-cors <img> of the same url would taint the canvas
           src: `${API}/photo/${encodeURIComponent(p.id)}?lcd`,
           clip: p.has_clip ? `${API}/clip/${encodeURIComponent(p.id)}?lcd` : null,
-          date: new Date(p.created_at).toISOString().slice(0, 10),
+          date: p.taken_on || new Date(p.created_at).toISOString().slice(0, 10),
           caption: p.message,
           by: p.name,
         })
@@ -595,6 +621,47 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   backdrop.renderOrder = -1;
   scene.add(backdrop);
 
+  // her room, painted from the photo's colours: butter-yellow wall, teal floral paper.
+  // it gets the same facets as everything else.
+  const room = new THREE.Mesh(
+    new THREE.PlaneGeometry(70, 40),
+    new THREE.ShaderMaterial({
+      uniforms: { ...shared },
+      vertexShader: `varying vec3 vView; varying vec2 vP; void main(){ vP = position.xy; vec4 mv = modelViewMatrix * vec4(position, 1.0); vView = mv.xyz; gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: /* glsl */ `
+        varying vec3 vView; varying vec2 vP;
+        ${SHARD}
+        float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+          float a = shHash(i).x, b = shHash(i+vec2(1,0)).x, c = shHash(i+vec2(0,1)).x, d = shHash(i+vec2(1,1)).x;
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }
+        vec3 paint(vec2 p) {
+          vec3 butter = vec3(0.95, 0.9, 0.58), paper = vec3(0.72, 0.86, 0.84), teal = vec3(0.45, 0.74, 0.78), pink = vec3(0.98, 0.72, 0.76);
+          float side = smoothstep(-6.0, 4.0, p.x + (n2(p * 0.3) - 0.5) * 3.0);
+          vec3 col = mix(butter, paper, side);
+          // floral swirls on the paper
+          float sw = n2(p * 1.3) + 0.5 * n2(p * 3.1);
+          col = mix(col, teal, smoothstep(0.95, 1.1, sw) * side);
+          col = mix(col, pink, smoothstep(9.0, 0.0, length(p - vec2(-1.0, 1.5))) * 0.35);
+          col *= 0.85 + 0.15 * smoothstep(-14.0, 8.0, p.y);
+          return col;
+        }
+        void main() {
+          float ppt = shPPT(vView);
+          float k = shAmount(ppt, 1.0);
+          vec3 col = paint(vP);
+          if (k > 0.001) {
+            vec4 v = shVoro(vP, shCell(ppt));
+            vec3 s = paint(v.xy) * (0.9 + 0.2 * v.w) * mix(0.8, 1.0, smoothstep(0.0, 0.1, v.z));
+            col = mix(col, s, k);
+          }
+          gl_FragColor = vec4(pow(col, vec3(2.2)), 1.0);
+        }
+      `,
+    })
+  );
+  room.position.set(0, -2, -7);
+  scene.add(room);
+
   // ---------- paint pass (linear in, srgb out) ----------
 
   const post = new THREE.ShaderMaterial({
@@ -677,31 +744,22 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
 
   const STUDIO_AT = 0.74;
 
-  function poseRig(p) {
-    if (p >= STUDIO_AT) {
-      rig.position.copy(STUDIO.pos);
-      rig.rotation.copy(STUDIO.rot);
-      handCard.visible = false;
-      rig.visible = true;
-      return;
-    }
-    const a = smootherstep(p, 0.05, 0.28);
-    rig.position.lerpVectors(HELD.pos, ASIDE.pos, a);
-    rig.rotation.set(lerp(HELD.rot.x, ASIDE.rot.x, a), lerp(HELD.rot.y, ASIDE.rot.y, a), lerp(HELD.rot.z, ASIDE.rot.z, a));
-    handCard.visible = true;
-    rig.visible = a < 0.999;
+  function pose(p) {
+    const studio = p >= STUDIO_AT;
+    figure.visible = room.visible = !studio;
+    studioCam.group.visible = backdrop.visible = studio;
+    // she lowers the camera: the forearm swings down about the elbow, out of frame
+    const a = studio ? 0 : smootherstep(p, 0.05, 0.28);
+    arm.rotation.set(0.35 * a, -0.15 * a, -1.45 * a);
   }
 
-  // world positions of camera parts in the studio pose
-  function studioPoint(local) {
-    rig.position.copy(STUDIO.pos);
-    rig.rotation.copy(STUDIO.rot);
-    rig.updateMatrixWorld(true);
-    return cam.localToWorld(local.clone());
-  }
-  const LAMP = studioPoint(LAMP_LOCAL);
-  const LCD_W = studioPoint(LCD_LOCAL);
-  const CAM_W = studioPoint(V3(0, 0, 0));
+  // world positions on the studio camera
+  studioCam.group.updateMatrixWorld(true);
+  const onStudio = (local) => studioCam.group.localToWorld(local.clone());
+  const LAMP = onStudio(studioCam.lampLocal);
+  const CAM_W = onStudio(V3(0, 0, 0));
+  const LCD_W = studioCam.lcdMesh.getWorldPosition(V3());
+  const EYE_FRONT = VA(P.eyeL).add(V3(0, 0, P.eyeRadius));
 
   let keys = [];
   let aspect = 1;
@@ -709,20 +767,17 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   const CUTS = [0.74, 0.885];
 
   function buildPath() {
-    const cover = Math.min(PH / 2 / T, PW / 2 / (T * aspect)) * 0.97;
-    const visW = 2 * cover * T * aspect;
-    const startX = clamp(1.2, -PW / 2 + visW / 2, PW / 2 - visW / 2);
-    const face = world(FACE), between = world(BETWEEN), eye = world(EYE);
     const k = (p, look, dir, dist) => ({ p, look: look.clone(), dir: dir.clone().normalize(), dist });
     const Z = V3(0, 0, 1);
     keys = [
-      k(0.0, V3(startX, 0, 0), Z, cover),
-      k(0.16, V3(lerp(startX, face.x, 0.6), face.y * 0.5, face.z * 0.5), V3(0.04, 0, 1), cover * 0.8),
-      k(0.3, face.clone().add(V3(-0.5, 0, 0)), V3(0.1, 0.02, 1), fit(4.6, 4.8)),
-      k(0.44, between, V3(0.05, 0.03, 1), fit(2.9, 1.3)),
-      k(0.56, eye, V3(0.02, 0.01, 1), fit(0.95, 0.5)),
-      k(0.66, eye, Z, 0.17),
-      k(0.74, eye, Z, 0.012),
+      // her, holding the camera up at us; framed so face, camera and hand all read
+      k(0.0, V3(-0.7, -0.9, 0.8), V3(0.06, 0.03, 1), fit(10.5, 9.5)),
+      k(0.16, V3(-0.1, -0.6, 1.0), V3(0.05, 0.02, 1), fit(7.4, 7.4)),
+      k(0.3, V3(0.05, -0.3, 1.3), V3(0.1, 0.03, 1), fit(4.6, 5.4)),
+      k(0.44, V3(0.05, 0.1, 1.55), V3(0.06, 0.03, 1), fit(2.8, 1.2)),
+      k(0.56, EYE_FRONT, V3(0.03, 0.01, 1), fit(0.95, 0.5)),
+      k(0.66, EYE_FRONT, Z, 0.3),
+      k(0.74, EYE_FRONT, Z, 0.012),
       // cut: the camera's front, as she sees it
       k(0.745, CAM_W, Z, fit(6.4, 4.4)),
       k(0.8, LAMP.clone().lerp(CAM_W, 0.4), Z, fit(3.2, 2.0)),
@@ -752,9 +807,10 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
 
   const focus = { on: false, t: 0, savedY: 0 };
 
+  // the whole back, face on, so its buttons are in reach
   function lcdPose(outPos, outLook) {
-    outLook.copy(LCD_W);
-    outPos.copy(LCD_W).add(V3(0, 0, -fit(1.96 * SCALE * 1.04, 1.47 * SCALE * 1.04)));
+    outLook.copy(CAM_W);
+    outPos.copy(CAM_W).add(V3(0, 0, -fit(CW * STUDIO_SCALE * 1.08, CH * STUDIO_SCALE * 1.12)));
   }
 
   function enterFocus() {
@@ -774,12 +830,63 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     leaveRec();
     window.KimayaSongs?.pause();
     songChip();
+    pin.style.cursor = "";
     document.body.classList.remove("j-locked");
     document.body.style.top = "";
     scrollTo(0, focus.savedY);
     journey.classList.remove("focused");
     dirty = true;
   }
+
+  // in focus mode the camera's own buttons drive it
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  function hitButton(e) {
+    const r = pin.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    view.updateMatrixWorld();
+    ray.setFromCamera(ndc, view);
+    return ray.intersectObjects(studioCam.buttons, false)[0] || null;
+  }
+
+  function press(hit) {
+    const btn = hit.object;
+    const action = btn.userData.action;
+    // a little travel, like a real button
+    btn.position.z -= 0.012;
+    setTimeout(() => { btn.position.z += 0.012; dirty = true; }, 140);
+    dirty = true;
+
+    if (action === "wheel") {
+      // left / right half of the wheel; back-group x grows to our right
+      const local = btn.parent.worldToLocal(hit.point.clone());
+      if (rec.mode === "play") flip(local.x > btn.position.x ? 1 : -1);
+    } else if (action === "ok") {
+      if (rec.mode === "play") flip(1);
+      else if (rec.mode === "intro") openCamera();
+      else if (rec.mode === "live") shutter();
+    } else if (action === "play" || action === "home") {
+      if (rec.mode !== "play") leaveRec();
+    } else if (action === "rec") {
+      if (rec.mode === "play") setMode("intro");
+      else leaveRec();
+    } else if (action === "shutter") {
+      if (rec.mode === "play") setMode("intro");
+      else if (rec.mode === "intro") openCamera();
+      else if (rec.mode === "live") shutter();
+    } else if (action === "menu") {
+      exitFocus();
+    }
+  }
+
+  pin.addEventListener("pointermove", (e) => {
+    if (focus.on) pin.style.cursor = hitButton(e) ? "pointer" : "default";
+  });
+  pin.addEventListener("click", (e) => {
+    if (!focus.on || e.target.closest("button, a, input, textarea, form")) return;
+    const hit = hitButton(e);
+    if (hit) press(hit);
+  });
 
   journey.querySelector(".j-focus-btn")?.addEventListener("click", (e) => { e.stopPropagation(); enterFocus(); });
   journey.querySelector(".j-exit")?.addEventListener("click", exitFocus);
@@ -1100,7 +1207,6 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   function draw() {
     const p = prog;
     journey.progress = p;
-    poseRig(p);
     pathPose(p, curPos, curLook);
 
     const fe = smootherstep(focus.t, 0, 1);
@@ -1113,17 +1219,14 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
       view.lookAt(curLook);
     }
 
+    pose(p);
     const studio = p >= STUDIO_AT;
-    portrait.visible = !studio;
-    backdrop.visible = studio;
 
     const close = studio
       ? 0.55 + 0.35 * smootherstep(p, 0.78, 0.88) - 0.3 * smootherstep(p, 0.89, 0.97)
       : smootherstep(p, 0.08, 0.5);
     post.uniforms.uPaint.value = (0.12 + 0.88 * close) * (1 - fe);
     shared.uShard.value = 1 - fe;
-    P.uIris.value = studio ? 0 : smootherstep(p, 0.46, 0.56);
-    P.uDive.value = smootherstep(p, 0.6, 0.68);
 
     const b1 = smootherstep(p, 0.7, 0.738) * (1 - smootherstep(p, 0.745, 0.77));
     const b2 = smootherstep(p, 0.86, 0.884) * (1 - smootherstep(p, 0.89, 0.915));

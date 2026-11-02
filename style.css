@@ -744,3 +744,5 @@ body.j-locked .journey-pin { position: fixed; inset: 0; height: 100svh; z-index:
 .j-song { display: none; }
 .journey.focused:not([data-lcd]) .j-song,
 .journey.focused[data-lcd="play"] .j-song { display: block; }
+/* the camera's own buttons drive it now */
+.j-prev, .j-next { display: none !important; }

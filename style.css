@@ -655,3 +655,63 @@ body:has(.journey) { padding-top: 0; }
 /* focus mode: page stops scrolling, the pinned camera owns the screen */
 body.j-locked { position: fixed; left: 0; right: 0; overflow: hidden; }
 body.j-locked .journey-pin { position: fixed; inset: 0; height: 100svh; z-index: 30; }
+
+/* focus mode controls: the camera's buttons, as an overlay */
+.j-modes { position: absolute; top: 18px; left: 18px; display: flex; gap: 8px; }
+.j-modes .hud-btn { position: static; }
+.journey:not([data-lcd]) .j-mode-play,
+.journey[data-lcd="play"] .j-mode-play { background: rgba(159, 232, 200, .2); }
+.journey[data-lcd]:not([data-lcd="play"]) .j-mode-rec { background: rgba(255, 74, 61, .25); color: #ff8a80; }
+.journey[data-lcd]:not([data-lcd="play"]) .j-prev,
+.journey[data-lcd]:not([data-lcd="play"]) .j-next { display: none; }
+
+.j-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 36px));
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.j-dock .hud-btn { position: static; }
+.j-rec-intro, .j-rec-live, .j-form, .j-rec-sent { display: none; }
+.journey[data-lcd="intro"] .j-rec-intro { display: flex; gap: 12px; }
+.journey[data-lcd="live"] .j-rec-live { display: flex; align-items: center; gap: 24px; }
+.journey[data-lcd="review"] .j-form,
+.journey[data-lcd="sending"] .j-form { display: grid; }
+.journey[data-lcd="sent"] .j-rec-sent { display: block; }
+
+.j-shutter {
+  all: unset;
+  cursor: pointer;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #e9e6df;
+  box-shadow: 0 0 0 4px rgba(10, 12, 12, .7), 0 0 0 6px #e9e6df;
+}
+.j-shutter:active { transform: scale(.94); }
+.j-shutter:focus-visible { box-shadow: 0 0 0 4px rgba(10, 12, 12, .7), 0 0 0 6px var(--stamp); }
+
+.j-form { width: 100%; gap: 8px; padding: 10px; background: rgba(6, 7, 8, .82); border: 1px solid #2a2a2e; }
+.j-form input, .j-form textarea {
+  width: 100%;
+  background: #0b0b0c;
+  border: 1px solid #333;
+  color: var(--ink);
+  font: italic 20px var(--serif);
+  padding: 8px 10px;
+  resize: none;
+}
+.j-form input:focus, .j-form textarea:focus { outline: 1px solid var(--hud); }
+.j-note { position: relative; }
+.j-left { position: absolute; right: 8px; bottom: 6px; color: var(--dim); font-size: 16px; }
+.j-row { display: flex; justify-content: space-between; }
+.j-err { margin: 0; color: var(--stamp); text-shadow: 0 0 6px rgba(0, 0, 0, .8); }
+.j-err:empty { display: none; }
+
+/* the screen flash that actually lights the face */
+.j-white { position: fixed; inset: 0; z-index: 80; background: #fff; opacity: 0; pointer-events: none; }
+.j-white.on { opacity: 1; }

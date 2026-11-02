@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
   <script type="importmap">
     {
       "imports": {
@@ -36,10 +36,40 @@
       </div>
       <button class="j-focus-btn hud-btn big">&#9673; FOCUS</button>
       <div class="j-focusmode">
+        <div class="j-modes">
+          <button class="j-mode-play hud-btn">&#9654; PLAY</button>
+          <button class="j-mode-rec hud-btn">&#9679; REC</button>
+        </div>
         <button class="j-exit hud-btn" aria-label="close">&times;</button>
         <button class="j-prev hud-btn big" aria-label="previous">&#9664;</button>
         <button class="j-next hud-btn big" aria-label="next">&#9654;</button>
+
+        <div class="j-dock">
+          <div class="j-rec-intro">
+            <button class="j-open hud-btn big">&#9654; OPEN CAMERA</button>
+            <button class="j-upload hud-btn big" hidden>&#8679; UPLOAD</button>
+            <input class="j-file" type="file" accept="image/*,video/*" hidden>
+          </div>
+          <div class="j-rec-live">
+            <button class="j-movie hud-btn">&#9632; PHOTO</button>
+            <button class="j-shutter" aria-label="take picture"></button>
+          </div>
+          <form class="j-form">
+            <input class="j-name" maxlength="24" placeholder="your name" autocomplete="nickname" required>
+            <div class="j-note">
+              <textarea class="j-msg" maxlength="140" rows="2" placeholder="a short note" required></textarea>
+              <span class="j-left">140</span>
+            </div>
+            <div class="j-row">
+              <button type="button" class="j-retake hud-btn">&#8634; RETAKE</button>
+              <button type="submit" class="j-send hud-btn big">&#9654; POST</button>
+            </div>
+          </form>
+          <div class="j-rec-sent"><button class="j-again hud-btn big">&#9654; ANOTHER</button></div>
+          <p class="j-err" role="alert"></p>
+        </div>
       </div>
+      <div class="j-white" aria-hidden="true"></div>
     </div>
   </section>
 
@@ -143,8 +173,9 @@
   <div class="booth-white" id="b-white" aria-hidden="true"></div>
 
   <script src="clips.js?v=1"></script>
+  <script src="guestbook-api.js?v=1"></script>
   <script src="script.js?v=5"></script>
   <script src="booth.js?v=5"></script>
-  <script type="module" src="journey.js?v=14"></script>
+  <script type="module" src="journey.js?v=15"></script>
 </body>
 </html>

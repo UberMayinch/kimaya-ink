@@ -472,6 +472,12 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     const W = canvas.width, H = canvas.height;
     g.fillStyle = "#050607";
     g.fillRect(0, 0, W, H);
+    if (rec.mode !== "play") drawRec(g, W, H);
+    else drawPlay(g, W, H);
+    lcd.texture.needsUpdate = true;
+  }
+
+  function drawPlay(g, W, H) {
     const items = gallery.items;
     const item = items[gallery.index % Math.max(items.length, 1)];
 
@@ -517,7 +523,6 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
       g.fillStyle = "#8a8780";
       g.fillText("card is waiting for its first picture", W / 2, H / 2 + 22);
     }
-    lcd.texture.needsUpdate = true;
   }
 
   function flip(dir) {
@@ -733,6 +738,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   function exitFocus() {
     if (!focus.on) return;
     focus.on = false;
+    leaveRec();
     document.body.classList.remove("j-locked");
     document.body.style.top = "";
     scrollTo(0, focus.savedY);
@@ -746,10 +752,290 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   journey.querySelector(".j-next")?.addEventListener("click", () => flip(1));
   addEventListener("keydown", (e) => {
     if (!focus.on) return;
+    if (e.target.closest?.("input, textarea")) return;
     if (e.key === "Escape") exitFocus();
-    if (e.key === "ArrowLeft") flip(-1);
-    if (e.key === "ArrowRight") flip(1);
+    if (rec.mode === "play" && e.key === "ArrowLeft") flip(-1);
+    if (rec.mode === "play" && e.key === "ArrowRight") flip(1);
+    if (rec.mode === "live" && e.key === " ") { e.preventDefault(); shutter(); }
   });
+
+  // ---------- REC: the camera is the booth ----------
+  // play -> intro -> live -> count -> (rec) -> review -> sending -> sent
+
+  const rec = { mode: "play", movie: false, stream: null, still: null, photo: null, clip: null, clipURL: "", takenOn: "", count: 0, recStart: 0 };
+  const video = Object.assign(document.createElement("video"), { playsInline: true, muted: true, autoplay: true });
+  const clipVideo = Object.assign(document.createElement("video"), { playsInline: true, muted: true, loop: true });
+  const white = journey.querySelector(".j-white");
+  const ui = {
+    err: journey.querySelector(".j-err"),
+    name: journey.querySelector(".j-name"),
+    msg: journey.querySelector(".j-msg"),
+    left: journey.querySelector(".j-left"),
+    movie: journey.querySelector(".j-movie"),
+    upload: journey.querySelector(".j-upload"),
+    file: journey.querySelector(".j-file"),
+    send: journey.querySelector(".j-send"),
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function setMode(mode) {
+    rec.mode = mode;
+    journey.dataset.lcd = mode;
+    if (ui.err) ui.err.textContent = "";
+    drawLCD();
+    dirty = true;
+  }
+
+  function stopCamera() {
+    if (rec.stream) rec.stream.getTracks().forEach((t) => t.stop());
+    rec.stream = null;
+    video.srcObject = null;
+  }
+
+  function clearShot() {
+    if (rec.clipURL) URL.revokeObjectURL(rec.clipURL);
+    clipVideo.pause();
+    clipVideo.removeAttribute("src");
+    Object.assign(rec, { still: null, photo: null, clip: null, clipURL: "", takenOn: "" });
+  }
+
+  function leaveRec() {
+    stopCamera();
+    clearShot();
+    setMode("play");
+  }
+
+  async function openCamera() {
+    clearShot();
+    try {
+      rec.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
+        audio: false,
+      });
+      video.srcObject = rec.stream;
+      await video.play();
+      setMode("live");
+    } catch {
+      setMode("intro");
+      ui.err.textContent = "camera blocked. allow camera access and try again.";
+    }
+  }
+
+  // same look as the old booth: mirrored 640x480, hand-done ccd grade, orange stamp
+  function grab(source) {
+    const W = 640, H = 480;
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const g = c.getContext("2d");
+    const vw = source.videoWidth, vh = source.videoHeight;
+    const s = Math.max(W / vw, H / vh);
+    g.save();
+    g.translate(W, 0);
+    g.scale(-1, 1);
+    g.drawImage(source, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s);
+    g.restore();
+    const img = g.getImageData(0, 0, W, H);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      let r = d[i], gr = d[i + 1], b = d[i + 2];
+      const l = 0.299 * r + 0.587 * gr + 0.114 * b;
+      r = l + (r - l) * 1.2; gr = l + (gr - l) * 1.2; b = l + (b - l) * 1.2;
+      d[i] = (r - 128) * 1.1 + 134; d[i + 1] = (gr - 128) * 1.1 + 130; d[i + 2] = (b - 128) * 1.1 + 122;
+    }
+    g.putImageData(img, 0, 0);
+    g.font = '30px "VT323", monospace';
+    g.textAlign = "right";
+    g.textBaseline = "bottom";
+    g.shadowColor = "rgba(255, 90, 0, .9)";
+    g.shadowBlur = 8;
+    g.fillStyle = "#ff8a1f";
+    g.fillText(stampOf(new Date()), W - 18, H - 12);
+    return c;
+  }
+
+  const toJpeg = (c, q = 0.85) =>
+    new Promise((resolve) => c.toBlob((b) => (b.size > 190 * 1024 && q > 0.5 ? resolve(toJpeg(c, q - 0.1)) : resolve(b)), "image/jpeg", q));
+
+  async function shutter() {
+    if (rec.mode !== "live") return;
+    setMode("count");
+    for (const n of [3, 2, 1]) {
+      rec.count = n;
+      drawLCD();
+      await wait(700);
+    }
+    rec.count = 0;
+
+    if (rec.movie && window.KimayaClips?.supported()) {
+      setMode("rec");
+      rec.recStart = performance.now();
+      try {
+        rec.clip = await window.KimayaClips.record(rec.stream, {
+          video,
+          seconds: 3,
+          onstart: () => { rec.still = grab(video); },
+        });
+        rec.clipURL = URL.createObjectURL(rec.clip);
+        clipVideo.src = rec.clipURL;
+        clipVideo.play().catch(() => {});
+      } catch (err) {
+        ui.err.textContent = `${err.message || err}.`;
+        setMode("live");
+        return;
+      }
+    } else {
+      // the screen is the flash: hold white so it actually lights the face, then grab
+      flashT = 1;
+      white?.classList.add("on");
+      await wait(220);
+      rec.still = grab(video);
+      await wait(120);
+      white?.classList.remove("on");
+    }
+    rec.photo = await toJpeg(rec.still);
+    stopCamera();
+    setMode("review");
+    ui.name?.focus();
+  }
+
+  async function upload(file) {
+    if (!file || !window.KimayaUploads) return;
+    clearShot();
+    try {
+      const out = await window.KimayaUploads.prepare(file);
+      rec.photo = out.photo;
+      rec.clip = out.clip || null;
+      rec.takenOn = out.takenOn || "";
+      rec.still = await createImageBitmap(out.photo);
+      if (rec.clip) {
+        rec.clipURL = URL.createObjectURL(rec.clip);
+        clipVideo.src = rec.clipURL;
+        clipVideo.play().catch(() => {});
+      }
+      stopCamera();
+      setMode("review");
+      ui.name?.focus();
+    } catch (err) {
+      ui.err.textContent = `${err.message || err}.`;
+    }
+  }
+
+  async function send(e) {
+    e.preventDefault();
+    const name = ui.name.value.trim();
+    const message = ui.msg.value.trim();
+    if (!rec.photo || !name || !message) return;
+    ui.send.disabled = true;
+    setMode("sending");
+    try {
+      await window.KimayaGuestbook.post({ name, message, photo: rec.photo, clip: rec.clip, takenOn: rec.takenOn });
+      ui.name.value = "";
+      ui.msg.value = "";
+      ui.left.textContent = "140";
+      clearShot();
+      setMode("sent");
+    } catch (err) {
+      setMode("review");
+      ui.err.textContent = `${err.message || err}.`;
+    } finally {
+      ui.send.disabled = false;
+    }
+  }
+
+  function cover(g, src, sw, sh, W, H, mirror = false) {
+    const s = Math.max(W / sw, H / sh);
+    g.save();
+    if (mirror) { g.translate(W, 0); g.scale(-1, 1); }
+    g.drawImage(src, (W - sw * s) / 2, (H - sh * s) / 2, sw * s, sh * s);
+    g.restore();
+  }
+
+  function hudText(g, text, x, y, align = "left", color = "#9fe8c8", size = 30) {
+    g.font = `${size}px "VT323", monospace`;
+    g.textAlign = align;
+    g.textBaseline = "middle";
+    g.fillStyle = color;
+    g.fillText(text, x, y);
+  }
+
+  function drawRec(g, W, H) {
+    const m = rec.mode;
+    const blink = Math.floor(performance.now() / 500) % 2 === 0;
+
+    if ((m === "live" || m === "count" || m === "rec") && video.videoWidth) cover(g, video, video.videoWidth, video.videoHeight, W, H, true);
+    if (m === "review" || m === "sending") {
+      if (rec.clip && clipVideo.videoWidth) cover(g, clipVideo, clipVideo.videoWidth, clipVideo.videoHeight, W, H);
+      else if (rec.still) cover(g, rec.still, rec.still.width, rec.still.height, W, H);
+    }
+
+    if (m === "intro" || m === "sent") {
+      g.fillStyle = "#050607";
+      g.fillRect(0, 0, W, H);
+      if (m === "intro") {
+        hudText(g, "● REC", W / 2, H / 2 - 70, "center", "#ff4a3d", 44);
+        hudText(g, "take a picture, leave a note.", W / 2, H / 2 - 14, "center", "#e9e6df", 30);
+        hudText(g, "it goes public once kimaya says yes.", W / 2, H / 2 + 26, "center", "#8a8780", 24);
+      } else {
+        hudText(g, "SAVED", W / 2, H / 2 - 20, "center", "#9fe8c8", 56);
+        hudText(g, "it'll show up once kimaya says yes.", W / 2, H / 2 + 30, "center", "#8a8780", 26);
+      }
+      return;
+    }
+
+    // viewfinder hud
+    g.fillStyle = "rgba(0,0,0,.3)";
+    g.fillRect(0, 0, W, 44);
+    if (m === "rec") {
+      const secs = Math.min(3, Math.floor((performance.now() - rec.recStart) / 1000));
+      hudText(g, `${blink ? "●" : " "} REC 00:0${secs}`, 16, 23, "left", "#ff4a3d");
+    } else if (m === "review" || m === "sending") {
+      hudText(g, m === "sending" ? "SENDING…" : "▶ REVIEW", 16, 23);
+    } else {
+      hudText(g, rec.movie ? "● MOVIE  320" : "■ 640x480 FINE", 16, 23);
+    }
+    hudText(g, "▮▮▮", W - 16, 23, "right");
+    if (m === "live" || m === "count") {
+      // focus brackets
+      g.strokeStyle = m === "count" ? "#6dff9e" : "#e9e6df";
+      g.lineWidth = 3;
+      const bw = 120, bh = 90, cx = W / 2, cy = H / 2, k = 18;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+        const x = cx + sx * bw / 2, y = cy + sy * bh / 2;
+        g.beginPath();
+        g.moveTo(x, y - sy * k);
+        g.lineTo(x, y);
+        g.lineTo(x - sx * k, y);
+        g.stroke();
+      });
+    }
+    if (m === "count" && rec.count) hudText(g, String(rec.count), W / 2, H / 2, "center", "#ffffff", 150);
+    hudText(g, stampOf(new Date()), W - 16, H - 30, "right", "#ff8a1f", 34);
+  }
+
+  // the lcd redraws every frame while it's showing something live
+  const lcdLive = () => ["live", "count", "rec"].includes(rec.mode) || (rec.mode === "review" && rec.clip);
+
+  journey.querySelector(".j-mode-play")?.addEventListener("click", leaveRec);
+  journey.querySelector(".j-mode-rec")?.addEventListener("click", () => { if (rec.mode === "play") setMode("intro"); });
+  journey.querySelector(".j-open")?.addEventListener("click", openCamera);
+  journey.querySelector(".j-shutter")?.addEventListener("click", shutter);
+  journey.querySelector(".j-retake")?.addEventListener("click", openCamera);
+  journey.querySelector(".j-again")?.addEventListener("click", () => setMode("intro"));
+  journey.querySelector(".j-form")?.addEventListener("submit", send);
+  ui.msg?.addEventListener("input", () => { ui.left.textContent = 140 - ui.msg.value.length; });
+  ui.movie?.addEventListener("click", () => {
+    rec.movie = !rec.movie;
+    ui.movie.textContent = rec.movie ? "● MOVIE" : "■ PHOTO";
+    drawLCD();
+    dirty = true;
+  });
+  if (ui.movie && !window.KimayaClips?.supported()) ui.movie.hidden = true;
+  if (ui.upload) {
+    ui.upload.hidden = !window.KimayaUploads;
+    ui.upload.addEventListener("click", () => ui.file.click());
+    ui.file.addEventListener("change", () => { upload(ui.file.files[0]); ui.file.value = ""; });
+  }
 
   // ---------- frame ----------
 
@@ -883,7 +1169,8 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     focus.t = focusMoving ? focus.t + (ft - focus.t) * (1 - Math.exp(-dt * 5)) : ft;
 
     // the LCD slideshows by itself while you're looking at the back
-    if (!focus.on && prog > 0.9 && now - gallery.lastFlip > 3500) flip(1);
+    if (!focus.on && rec.mode === "play" && prog > 0.9 && now - gallery.lastFlip > 3500) flip(1);
+    if (lcdLive()) { drawLCD(); dirty = true; }
 
     const boil = !calm && now - lastBoil > 1000 / 12;
     if (boil) { lastBoil = now; frameNo++; }

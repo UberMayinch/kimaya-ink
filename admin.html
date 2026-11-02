@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>kimaya · approvals</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=4">
+  <style>
+    .admin { max-width: 900px; margin: 0 auto; }
+    .admin form { display: flex; gap: 10px; margin: 20px 0; }
+    .admin input { flex: 1; background: #0b0b0c; border: 1px solid #333; color: var(--ink); font: 20px var(--mono); padding: 6px 10px; }
+    .queue { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 20px; }
+    .card { background: #f4f1ea; color: #2a2724; padding: 10px; }
+    .card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+    .card p { margin: 8px 0; font: italic 19px var(--serif); overflow-wrap: anywhere; }
+    .card small { font: 15px var(--mono); color: #6d6862; }
+    .card .row { display: flex; justify-content: space-between; margin-top: 8px; }
+    .card .hud-btn { color: #1d5e46; border-color: #1d5e46; text-shadow: none; }
+    .card .hud-btn.del { color: #a23a12; border-color: #a23a12; }
+    h2 { font: 24px var(--mono); color: var(--hud); letter-spacing: .1em; margin: 40px 0 16px; }
+    #status { color: var(--stamp); min-height: 1em; }
+  </style>
+</head>
+<body>
+  <main class="lcd admin">
+    <header class="hud"><span>&#9679; APPROVALS</span><a class="hud-btn" href="/">&#9664; SITE</a></header>
+    <form id="login">
+      <input id="token" type="password" placeholder="admin token" autocomplete="current-password">
+      <button class="hud-btn">&#9654; LOAD</button>
+    </form>
+    <p id="status"></p>
+    <h2>PENDING</h2>
+    <div class="queue" id="pending"></div>
+    <h2>LIVE</h2>
+    <div class="queue" id="live"></div>
+  </main>
+  <script src="admin.js?v=1"></script>
+</body>
+</html>

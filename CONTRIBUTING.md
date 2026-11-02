@@ -46,3 +46,24 @@ CNAME           custom domain
 ## changing css/js
 
 GitHub Pages caches files for ~10 minutes. When you change `style.css`, `script.js` or `camera.js`, bump the `?v=` number on its tag in `index.html` so visitors don't get new HTML with old styles.
+
+## guestbook backend
+
+`worker/` is a Cloudflare Worker (`kimaya-guestbook`) with a D1 database. Visitors post a selfie and a short note from the booth (`booth.js`). Every post waits in a queue until it's approved on `/admin.html`.
+
+```sh
+cd worker
+npx wrangler d1 execute kimaya-guestbook --local --file schema.sql   # once
+npx wrangler dev --port 8787                                          # local API, uses .dev.vars
+npx wrangler deploy                                                   # ship
+```
+
+`worker/.dev.vars` (gitignored) holds local test values:
+
+```
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+ADMIN_TOKEN=local-test-admin-token-0123456789
+IP_SALT=local-test-salt
+```
+
+When the site runs on `localhost`, it talks to `localhost:8787` automatically.

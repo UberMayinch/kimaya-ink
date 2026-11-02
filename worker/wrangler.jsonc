@@ -1,0 +1,20 @@
+{
+  "name": "kimaya-guestbook",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_ORIGINS": "https://kimaya.ink,https://www.kimaya.ink"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kimaya-guestbook",
+      "database_id": "6ad98f60-1d67-4438-af40-bca884e74e33"
+    }
+  ]
+  // secrets (set with `npx wrangler secret put <NAME>`):
+  //   ADMIN_TOKEN       you choose, 24+ chars, used on /admin.html
+  //   TURNSTILE_SECRET  from the turnstile widget
+  //   IP_SALT           any random string, salts the ip hashes
+}

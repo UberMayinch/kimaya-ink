@@ -377,7 +377,7 @@ function init(THREE, RoundedBoxGeometry) {
   stage.addEventListener("pointerleave", () => { tilt.tx = tilt.ty = 0; });
 
   stage.addEventListener("click", () => {
-    if (calm) return;
+    if (calm) return window.dispatchEvent(new Event("kimaya:booth"));
     flashT = 1;
     const page = document.querySelector(".flash");
     if (page) {
@@ -385,6 +385,7 @@ function init(THREE, RoundedBoxGeometry) {
       void page.offsetWidth;
       page.classList.add("on");
     }
+    setTimeout(() => window.dispatchEvent(new Event("kimaya:booth")), 350);
   });
 
   function draw(t) {

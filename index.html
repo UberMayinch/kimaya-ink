@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <script type="importmap">
     {
       "imports": {
@@ -38,7 +38,7 @@
     </header>
 
     <section class="hero">
-      <div class="stage" id="stage" title="click for flash">
+      <div class="stage" id="stage" title="click to take a picture">
         <span class="stage-msg">FOCUSING&hellip;</span>
       </div>
       <h1 class="title" data-text="kimaya">kimaya</h1>
@@ -46,6 +46,14 @@
     </section>
 
     <section id="roll" class="roll" aria-live="polite"></section>
+
+    <section class="guestbook">
+      <header class="hud guestbook-head">
+        <span>&#9679; GUESTBOOK</span>
+        <button class="hud-btn" id="open-booth">&#9654; TAKE A PICTURE</button>
+      </header>
+      <div id="guests" class="roll"></div>
+    </section>
 
     <footer class="hud hud-bottom">
       <span id="count">[ 0 ]</span>
@@ -70,7 +78,51 @@
     <button class="close" id="v-close" aria-label="close">&times;</button>
   </div>
 
+  <div class="booth" id="booth" role="dialog" aria-modal="true" aria-label="photo booth" data-state="intro" hidden>
+    <div class="booth-lcd">
+      <div class="booth-hud">
+        <span>&#9679; BOOTH</span>
+        <button class="hud-btn" id="b-close" aria-label="close">&times;</button>
+      </div>
+
+      <div class="booth-screen">
+        <video id="b-video" playsinline muted autoplay></video>
+        <img id="b-shot" alt="your picture">
+        <span class="booth-count" id="b-count" aria-live="assertive"></span>
+        <div class="booth-intro">
+          <p>take a picture, leave a note.</p>
+          <p class="fine">your photo and note become public once kimaya approves them.</p>
+          <button class="hud-btn big" id="b-start">&#9654; OPEN CAMERA</button>
+        </div>
+        <div class="booth-sent">
+          <p>SAVED</p>
+          <p class="fine">it'll show up once kimaya says yes.</p>
+          <button class="hud-btn" id="b-again">&#9654; ANOTHER</button>
+        </div>
+      </div>
+
+      <button class="shutter" id="b-shutter" aria-label="take picture"></button>
+
+      <form class="booth-form" id="b-form">
+        <input id="b-name" maxlength="24" placeholder="your name" autocomplete="nickname" required>
+        <div class="msg">
+          <textarea id="b-msg" maxlength="140" rows="2" placeholder="a short note" required></textarea>
+          <span id="b-left">140</span>
+        </div>
+        <div class="row">
+          <button type="button" class="hud-btn" id="b-retake">&#8634; RETAKE</button>
+          <button type="submit" class="hud-btn big" id="b-send">&#9654; POST</button>
+        </div>
+      </form>
+
+      <p class="booth-err" id="b-err" role="alert"></p>
+      <div id="b-ts"></div>
+    </div>
+  </div>
+  <div class="booth-white" id="b-white" aria-hidden="true"></div>
+
   <script src="script.js?v=3"></script>
-  <script type="module" src="camera.js?v=3"></script>
+  <script src="booth.js?v=4"></script>
+  <script type="module" src="camera.js?v=4"></script>
 </body>
 </html>

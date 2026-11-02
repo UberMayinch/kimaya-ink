@@ -3,3 +3,4 @@ node_modules/
 worker/.dev.vars
 .dev.vars
 .wrangler-dev.log
+.claude/

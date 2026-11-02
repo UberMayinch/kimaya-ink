@@ -605,3 +605,27 @@ body:has(.journey) { padding-top: 0; }
   .journey { height: 100svh; }
   .j-rec, .j-hint { animation: none; }
 }
+
+/* end of the journey: hold the camera */
+.j-focus-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  background: rgba(10, 12, 12, .55);
+  display: none;
+}
+.journey.at-end .j-focus-btn { display: block; }
+.journey.focused .j-focus-btn,
+.journey.focused .j-hud { display: none; }
+
+.j-focusmode { display: none; }
+.journey.focused .j-focusmode { display: block; }
+.j-focusmode .hud-btn { position: absolute; background: rgba(10, 12, 12, .55); }
+.j-exit { top: 18px; right: 18px; font-size: 34px; border: 0; }
+.j-prev { left: 18px; top: 50%; transform: translateY(-50%); }
+.j-next { right: 18px; top: 50%; transform: translateY(-50%); }
+
+/* focus mode: page stops scrolling, the pinned camera owns the screen */
+body.j-locked { position: fixed; left: 0; right: 0; overflow: hidden; }
+body.j-locked .journey-pin { position: fixed; inset: 0; height: 100svh; z-index: 30; }

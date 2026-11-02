@@ -1,12 +1,14 @@
 // kimaya.ink guestbook: visitors post a selfie + short note, nothing shows until approved.
 //
-// POST   /api/posts                  multipart: name, message, photo (jpeg), token (turnstile), clip (optional webm/mp4)
-// GET    /api/posts                  approved posts, newest first, with has_clip
+// POST   /api/posts                  multipart: name, message, photo (jpeg), token (turnstile),
+//                                    optional taken_on (YYYY-MM-DD), optional clip (webm/mp4)
+// GET    /api/posts                  approved posts, by taken_on (fallback created_at), newest first, with has_clip
 // GET    /api/photo/:id              jpeg, approved only
 // GET    /api/clip/:id               webm/mp4, approved only, supports Range
 // GET    /api/admin/pending          Bearer ADMIN_TOKEN
 // GET    /api/admin/photo/:id        Bearer ADMIN_TOKEN, any status
 // GET    /api/admin/clip/:id         Bearer ADMIN_TOKEN, any status
+// POST   /api/admin/posts            Bearer ADMIN_TOKEN, same fields minus token, live at once
 // POST   /api/admin/posts/:id/approve
 // DELETE /api/admin/posts/:id
 
@@ -18,6 +20,8 @@ const MAX_MESSAGE = 140;
 const PER_IP_PER_HOUR = 3;
 const MAX_PENDING = 300;
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const WALL_LIMIT = 500;
 
 export default {
   async fetch(req, env) {
@@ -58,6 +62,7 @@ async function route(req, env) {
     if (parts[2] === "pending" && req.method === "GET") return listPending(env);
     if (parts[2] === "photo" && parts[3] && req.method === "GET") return photo(env, parts[3], true);
     if (parts[2] === "clip" && parts[3] && req.method === "GET") return clip(req, env, parts[3], true);
+    if (parts[2] === "posts" && !parts[3] && req.method === "POST") return createAdminPost(req, env);
     if (parts[2] === "posts" && parts[3]) {
       if (parts[4] === "approve" && req.method === "POST") return setStatus(env, parts[3], "approved");
       if (!parts[4] && req.method === "DELETE") return remove(env, parts[3]);
@@ -69,9 +74,12 @@ async function route(req, env) {
 
 // ---------- public ----------
 
+// sorted as a series: when it was taken, else when it was posted
 async function listApproved(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, name, message, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'approved' ORDER BY created_at DESC LIMIT 60"
+    `SELECT id, name, message, taken_on, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'approved'
+     ORDER BY COALESCE(taken_on, strftime('%Y-%m-%d', created_at / 1000, 'unixepoch')) DESC, created_at DESC
+     LIMIT ${WALL_LIMIT}`
   ).all();
   return json({ posts: results.map(withClipFlag) }, 200, { "Cache-Control": "public, max-age=30" });
 }
@@ -122,15 +130,8 @@ async function clip(req, env, id, admin) {
 }
 
 async function createPost(req, env) {
-  const len = Number(req.headers.get("Content-Length") || 0);
-  if (!len || len > MAX_BODY) return json({ error: "too big" }, 413);
-
-  let form;
-  try {
-    form = await req.formData();
-  } catch {
-    return json({ error: "bad form" }, 400);
-  }
+  const { form, error } = await readForm(req);
+  if (error) return error;
 
   const ip = req.headers.get("CF-Connecting-IP") || "unknown";
 
@@ -138,27 +139,8 @@ async function createPost(req, env) {
     return json({ error: "verification failed" }, 403);
   }
 
-  const name = clean(form.get("name"), MAX_NAME);
-  const message = clean(form.get("message"), MAX_MESSAGE);
-  if (!name || !message) return json({ error: "name and message required" }, 400);
-
-  const file = form.get("photo");
-  if (!file || typeof file === "string") return json({ error: "photo required" }, 400);
-  if (file.size > MAX_PHOTO) return json({ error: "photo too big" }, 413);
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return json({ error: "photo must be jpeg" }, 415);
-
-  // optional movie clip, sniffed by magic bytes (the client's type is ignored)
-  let clipBytes = null;
-  let clipType = null;
-  const movie = form.get("clip");
-  if (movie !== null) {
-    if (typeof movie === "string") return json({ error: "bad clip" }, 400);
-    if (movie.size > MAX_CLIP) return json({ error: "clip too big" }, 413);
-    clipBytes = new Uint8Array(await movie.arrayBuffer());
-    clipType = sniffClip(clipBytes);
-    if (!clipType) return json({ error: "clip must be webm or mp4" }, 415);
-  }
+  const fields = await readFields(form, true);
+  if (fields.error) return fields.error;
 
   const ipHash = await sha256(`${env.IP_SALT || ""}:${ip}`);
   const since = Date.now() - HOUR;
@@ -170,21 +152,98 @@ async function createPost(req, env) {
   if (mine >= PER_IP_PER_HOUR) return json({ error: "slow down, try again later" }, 429);
   if (pending >= MAX_PENDING) return json({ error: "guestbook is full right now" }, 503);
 
-  const id = crypto.randomUUID();
-  await env.DB.prepare(
-    "INSERT INTO posts (id, name, message, photo, clip, clip_type, ip_hash, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)"
-  )
-    .bind(id, name, message, bytes, clipBytes, clipType, ipHash, Date.now())
-    .run();
-
+  await insertPost(env, fields, ipHash, "pending");
   return json({ ok: true, status: "pending" }, 201);
+}
+
+async function readForm(req) {
+  const len = Number(req.headers.get("Content-Length") || 0);
+  if (!len || len > MAX_BODY) return { error: json({ error: "too big" }, 413) };
+  try {
+    return { form: await req.formData() };
+  } catch {
+    return { error: json({ error: "bad form" }, 400) };
+  }
+}
+
+// shared by the public booth and the owner's bulk upload
+async function readFields(form, textRequired) {
+  const name = clean(form.get("name"), MAX_NAME);
+  const message = clean(form.get("message"), MAX_MESSAGE);
+  if (textRequired && (!name || !message)) return { error: json({ error: "name and message required" }, 400) };
+
+  const raw = form.get("taken_on");
+  const takenOn = raw === null || raw === "" ? null : validDay(raw);
+  if (takenOn === false) return { error: json({ error: "taken_on must be a real YYYY-MM-DD date" }, 400) };
+
+  const file = form.get("photo");
+  if (!file || typeof file === "string") return { error: json({ error: "photo required" }, 400) };
+  if (file.size > MAX_PHOTO) return { error: json({ error: "photo too big" }, 413) };
+  const photo = new Uint8Array(await file.arrayBuffer());
+  if (photo[0] !== 0xff || photo[1] !== 0xd8) return { error: json({ error: "photo must be jpeg" }, 415) };
+
+  const clip = await readClip(form);
+  if (clip.error) return clip;
+
+  return { name, message, photo, takenOn, clip: clip.bytes, clipType: clip.type };
+}
+
+// optional movie clip: webm (ebml magic) or mp4 (ftyp box), 800KB max
+async function readClip(form) {
+  const file = form.get("clip");
+  if (file === null || file === "") return {};
+  if (typeof file === "string") return { error: json({ error: "clip must be a file" }, 400) };
+  if (file.size > MAX_CLIP) return { error: json({ error: "clip too big" }, 413) };
+  const b = new Uint8Array(await file.arrayBuffer());
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return { bytes: b, type: "video/webm" };
+  if (String.fromCharCode(b[4], b[5], b[6], b[7]) === "ftyp") return { bytes: b, type: "video/mp4" };
+  return { error: json({ error: "clip must be webm or mp4" }, 415) };
+}
+
+// "YYYY-MM-DD" that is a real day between 1900 and tomorrow, else false
+function validDay(v) {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const t = Date.parse(`${v}T00:00:00Z`);
+  if (isNaN(t) || new Date(t).toISOString().slice(0, 10) !== v) return false;
+  if (v < "1900-01-01" || t > Date.now() + DAY) return false;
+  return v;
+}
+
+async function insertPost(env, f, ipHash, status) {
+  const row = {
+    id: crypto.randomUUID(),
+    name: f.name,
+    message: f.message,
+    photo: f.photo,
+    ip_hash: ipHash,
+    status,
+    created_at: Date.now(),
+    taken_on: f.takenOn,
+  };
+  // clip columns come from migrations/0002_clips.sql
+  if (f.clip) Object.assign(row, { clip: f.clip, clip_type: f.clipType });
+  const cols = Object.keys(row);
+  await env.DB.prepare(`INSERT INTO posts (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`)
+    .bind(...Object.values(row))
+    .run();
+  return row.id;
 }
 
 // ---------- admin ----------
 
+// owner upload: isAdmin already passed, so no turnstile, no ip limit, straight to approved
+async function createAdminPost(req, env) {
+  const { form, error } = await readForm(req);
+  if (error) return error;
+  const fields = await readFields(form, false);
+  if (fields.error) return fields.error;
+  const id = await insertPost(env, fields, "admin", "approved");
+  return json({ ok: true, id, status: "approved" }, 201);
+}
+
 async function listPending(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, name, message, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
+    "SELECT id, name, message, taken_on, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
   ).all();
   return json({ posts: results.map(withClipFlag) }, 200, { "Cache-Control": "no-store" });
 }
@@ -224,13 +283,6 @@ async function turnstileOk(env, token, ip) {
 function clean(v, max) {
   if (typeof v !== "string") return "";
   return v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
-}
-
-function sniffClip(b) {
-  if (b.length < 12) return null;
-  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "video/webm";
-  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "video/mp4"; // "ftyp"
-  return null;
 }
 
 // "bytes=a-b", "bytes=a-", "bytes=-n" -> { start, end } inclusive, or null if unsatisfiable

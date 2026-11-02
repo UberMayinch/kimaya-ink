@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
   <link rel="stylesheet" href="songs.css?v=1">
   <script type="importmap">
     {
@@ -136,12 +136,16 @@
       <div class="booth-screen">
         <video id="b-video" playsinline muted autoplay></video>
         <img id="b-shot" alt="your picture">
+        <div class="booth-up" id="b-up"></div>
         <span class="booth-count" id="b-count" aria-live="assertive"></span>
         <span class="booth-rec" aria-hidden="true">&#9679; REC</span>
         <div class="booth-intro">
           <p>take a picture, leave a note.</p>
           <p class="fine">your photo and note become public once kimaya approves them.</p>
-          <button class="hud-btn big" id="b-start">&#9654; OPEN CAMERA</button>
+          <div class="booth-pick" id="b-pick">
+            <button class="hud-btn big" id="b-start">&#9654; OPEN CAMERA</button>
+          </div>
+          <p class="fine">uploads are shrunk and stripped of location data first.</p>
         </div>
         <div class="booth-sent">
           <p>SAVED</p>
@@ -176,9 +180,10 @@
 
   <script src="songs.js?v=1"></script>
   <script src="clips.js?v=1"></script>
+  <script src="uploads.js?v=1"></script>
   <script src="guestbook-api.js?v=1"></script>
   <script src="script.js?v=6"></script>
-  <script src="booth.js?v=5"></script>
-  <script type="module" src="journey.js?v=18"></script>
+  <script src="booth.js?v=6"></script>
+  <script type="module" src="journey.js?v=19"></script>
 </body>
 </html>

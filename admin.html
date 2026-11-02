@@ -21,6 +21,21 @@
     .card .hud-btn.del { color: #a23a12; border-color: #a23a12; }
     h2 { font: 24px var(--mono); color: var(--hud); letter-spacing: .1em; margin: 40px 0 16px; }
     #status { color: var(--stamp); min-height: 1em; }
+    .card .print-date { color: #c2601a; }
+    .add .fine { margin: 0 0 14px; }
+    .add-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: start; margin-bottom: 16px; }
+    .add-bar input { flex: 1; min-width: 160px; }
+    .add input { background: #0b0b0c; border: 1px solid #333; color: var(--ink); font: 20px var(--mono); padding: 6px 10px; }
+    .add-list { display: grid; gap: 12px; }
+    .item { display: grid; grid-template-columns: 160px 1fr; gap: 12px; align-items: start; border: 1px solid #2a2a2e; padding: 10px; }
+    .item .thumb img, .item .thumb video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+    .item .fields { display: grid; gap: 8px; }
+    .item .fields div { display: flex; gap: 8px; flex-wrap: wrap; }
+    .item .fields input { flex: 1; min-width: 120px; }
+    .item .state { color: var(--dim); }
+    .item.err .state { color: var(--stamp); }
+    .item.done { opacity: .55; }
+    .item.done .state { color: var(--hud); }
   </style>
 </head>
 <body>
@@ -31,12 +46,23 @@
       <button class="hud-btn">&#9654; LOAD</button>
     </form>
     <p id="status"></p>
+    <h2>ADD TO GALLERY</h2>
+    <section class="add">
+      <p class="fine">pick photos or short videos (first 5s are used). each one is shrunk, stripped of all metadata including location, and stamped with its date on this computer before it's sent. they go live straight away.</p>
+      <div class="add-bar">
+        <span id="add-pick"></span>
+        <input id="add-by" maxlength="24" placeholder="name for all (optional)">
+        <button class="hud-btn big" id="add-send" type="button">&#9654; UPLOAD ALL</button>
+      </div>
+      <div class="add-list" id="add-list"></div>
+    </section>
     <h2>PENDING</h2>
     <div class="queue" id="pending"></div>
     <h2>LIVE</h2>
     <div class="queue" id="live"></div>
   </main>
   <script src="clips.js?v=1"></script>
+  <script src="uploads.js?v=1"></script>
   <script src="admin.js?v=2"></script>
 </body>
 </html>

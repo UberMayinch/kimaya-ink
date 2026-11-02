@@ -431,12 +431,13 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   const stampOf = (d) => `'${pad(d.getFullYear() % 100)} ${pad(d.getMonth() + 1)} ${pad(d.getDate())}`;
 
   const gallery = { items: [], index: 0, imgs: new Map(), lastFlip: 0 };
+  const playVideo = Object.assign(document.createElement("video"), { playsInline: true, muted: true, loop: true, crossOrigin: "anonymous" });
 
   async function loadGallery() {
     const items = [];
     try {
       const list = await fetch("photos.json", { cache: "no-cache" }).then((r) => r.json());
-      list.forEach((p) => items.push({ src: p.file, date: p.date, caption: p.caption || "", by: p.by || "" }));
+      list.forEach((p) => items.push({ src: p.file, clip: p.clip || null, date: p.date, caption: p.caption || "", by: p.by || "", song: p.song || null }));
     } catch {}
     try {
       const { posts } = await fetch(`${API}/posts`).then((r) => r.json());
@@ -444,6 +445,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
         items.push({
           // own cache key: an earlier non-cors <img> of the same url would taint the canvas
           src: `${API}/photo/${encodeURIComponent(p.id)}?lcd`,
+          clip: p.has_clip ? `${API}/clip/${encodeURIComponent(p.id)}?lcd` : null,
           date: new Date(p.created_at).toISOString().slice(0, 10),
           caption: p.message,
           by: p.name,
@@ -483,7 +485,20 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
 
     if (item) {
       const img = imageFor(item);
-      if (img) {
+      if (item.clip) {
+        if (playVideo.dataset.src !== item.clip) {
+          playVideo.dataset.src = item.clip;
+          playVideo.src = item.clip;
+          playVideo.play().catch(() => {});
+        }
+      } else if (playVideo.dataset.src) {
+        playVideo.pause();
+        playVideo.removeAttribute("src");
+        delete playVideo.dataset.src;
+      }
+      if (item.clip && playVideo.readyState >= 2) {
+        cover(g, playVideo, playVideo.videoWidth, playVideo.videoHeight, W, H);
+      } else if (img) {
         const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
         const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
         g.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
@@ -504,6 +519,13 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
       g.font = 'italic 28px "Instrument Serif", Georgia, serif';
       const cap = item.caption + (item.by ? `  — ${item.by}` : "");
       g.fillText(cap.length > 46 ? cap.slice(0, 45) + "…" : cap, 16, H - 27);
+      if (item.song) {
+        g.font = '26px "VT323", monospace';
+        g.textAlign = "left";
+        g.fillStyle = "#e9e6df";
+        const line = `♪ ${item.song.title} — ${item.song.artist}`;
+        g.fillText(line.length > 44 ? line.slice(0, 43) + "…" : line, 16, 64);
+      }
       if (item.date) {
         g.font = '34px "VT323", monospace';
         g.textAlign = "right";
@@ -530,7 +552,17 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     gallery.index = (gallery.index + dir + gallery.items.length) % gallery.items.length;
     gallery.lastFlip = performance.now();
     drawLCD();
+    songChip();
     dirty = true;
+  }
+
+  // in focus mode the current photo's song gets a real play chip
+  const songSlot = journey.querySelector(".j-song");
+  function songChip() {
+    if (!songSlot) return;
+    const item = gallery.items[gallery.index];
+    const show = focus.on && rec.mode === "play" && item?.song && window.KimayaSongs;
+    songSlot.replaceChildren(...(show ? [window.KimayaSongs.chip(item.song)] : []));
   }
 
   // ---------- backdrop for the camera scenes: painted from her room's colours ----------
@@ -732,6 +764,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     document.body.style.top = `-${focus.savedY}px`;
     document.body.classList.add("j-locked");
     journey.classList.add("focused");
+    songChip();
     dirty = true;
   }
 
@@ -739,6 +772,8 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
     if (!focus.on) return;
     focus.on = false;
     leaveRec();
+    window.KimayaSongs?.pause();
+    songChip();
     document.body.classList.remove("j-locked");
     document.body.style.top = "";
     scrollTo(0, focus.savedY);
@@ -781,6 +816,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   function setMode(mode) {
     rec.mode = mode;
     journey.dataset.lcd = mode;
+    songChip();
     if (ui.err) ui.err.textContent = "";
     drawLCD();
     dirty = true;
@@ -1014,7 +1050,10 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   }
 
   // the lcd redraws every frame while it's showing something live
-  const lcdLive = () => ["live", "count", "rec"].includes(rec.mode) || (rec.mode === "review" && rec.clip);
+  const lcdLive = () =>
+    ["live", "count", "rec"].includes(rec.mode) ||
+    (rec.mode === "review" && rec.clip) ||
+    (rec.mode === "play" && (focus.on || prog > 0.88) && gallery.items[gallery.index]?.clip);
 
   journey.querySelector(".j-mode-play")?.addEventListener("click", leaveRec);
   journey.querySelector(".j-mode-rec")?.addEventListener("click", () => { if (rec.mode === "play") setMode("intro"); });

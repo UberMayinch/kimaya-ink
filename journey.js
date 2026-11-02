@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=28";
-import { createInput } from "./experience/input.js?v=28";
-import { createPortrait } from "./experience/portrait.js?v=28";
-import { createCameraWorld } from "./experience/camera-world.js?v=28";
-import { createArchive } from "./experience/archive.js?v=28";
-import { createPost } from "./experience/post.js?v=28";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=28";
+import { createController, stateAt, R } from "./experience/controller.js?v=29";
+import { createInput } from "./experience/input.js?v=29";
+import { createPortrait } from "./experience/portrait.js?v=29";
+import { createCameraWorld } from "./experience/camera-world.js?v=29";
+import { createArchive } from "./experience/archive.js?v=29";
+import { createPost } from "./experience/post.js?v=29";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=29";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -232,9 +232,16 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
   }
 
   // below the hero: once a lap has landed back on the photograph (or the ↓ was pressed) the page
-  // takes wheel-down at the start, and the wish below scrolls up over the journey. a tap on her
-  // eye, the keys or NEXT still go in; the next landing releases again.
+  // takes wheel-down at the start. that scroll fades the photograph to black under the title and
+  // brings the wish up beneath it. scrolling back up, a tap on her eye, the keys or NEXT go in again.
   let released = false;
+  const below = () => scrollY > 1;
+  function onScroll() {
+    const k = clamp(scrollY / innerHeight, 0, 1);
+    journey.style.setProperty("--fade", k.toFixed(3));
+    journey.classList.toggle("below", k > 0.02);
+  }
+  addEventListener("scroll", onScroll, { passive: true });
   const atStart = () => ctrl.p < 0.005 && !ctrl.flying && !archive.isOpen();
   function release() {
     if (released) return;
@@ -255,7 +262,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
       return released && dy > 0 && atStart();
     },
     onNudge(dp, src) {
-      if (archive.isOpen() || pinned !== null) return;
+      if (archive.isOpen() || pinned !== null || below()) return;
       ctrl.nudge(dp * (src === "pinch" ? 1.2 : 1) * (calm ? 0.6 : 1));
       velSrc = src;
       dirty = true;
@@ -273,6 +280,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
       dirty = true;
     },
     onClick(e) {
+      if (below()) { scrollTo({ top: 0, behavior: calm ? "auto" : "smooth" }); return true; }
       poseForHit();
       if (archive.isOpen()) {
         if (archive.A.t < 0.9 || sinceOpen() < 400) return true;

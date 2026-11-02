@@ -610,7 +610,8 @@ body:has(.journey) { padding-top: 0; }
    released (a lap landed, or ↓): the page scrolls and the wish below slides over it */
 body:has(.journey.live) { padding: 0; }
 body:has(.journey.live):not(.j-released) { overflow: hidden; }
-.journey.live ~ .j-below { position: relative; z-index: 11; margin: 100svh 0 0; min-height: 100svh; }
+.journey.live ~ .j-below { height: 100svh; margin-top: 100svh; pointer-events: none; }
+.journey:not(.live) ~ .j-below { display: none; }
 .journey.live.released.at-start .journey-pin { touch-action: pan-y; }
 .journey.live ~ main,
 .journey.live ~ .viewer,
@@ -691,29 +692,26 @@ body:has(.journey.live):not(.j-released) { overflow: hidden; }
 .journey.focused .j-down { display: none; }
 @keyframes j-bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 6px); } }
 
-/* below the hero: the wish, in the title's hand, a little smaller */
-.j-below {
-  display: grid;
-  place-items: center;
-  min-height: 70svh;
-  padding: clamp(48px, 10vh, 120px) clamp(16px, 5vw, 48px);
-  margin: 0 calc(-1 * clamp(10px, 3vw, 32px));
-  background: #0b0b0c;
-  border-top: 1px solid rgba(255, 246, 234, .08);
-  text-align: center;
-}
+/* scrolled down: the photograph goes black under the title, the wish comes up beneath it */
+.j-veil { position: absolute; inset: 0; background: #000; opacity: var(--fade, 0); pointer-events: none; }
+.journey:not(.live) .j-veil { display: none; }
 .j-wish {
-  margin: 0;
-  max-width: 22ch;
+  left: 50%;
+  top: calc(22px + clamp(26px, 4vw, 54px) * 1.35);
+  transform: translateX(-50%) translateY(calc((1 - var(--fade, 0)) * 12px));
+  white-space: nowrap;
   font-family: var(--serif);
   font-style: italic;
-  font-size: clamp(24px, 3.6vw, 48px);
-  line-height: 1.15;
+  font-size: clamp(19px, 2.9vw, 39px);
   letter-spacing: -.02em;
   color: #fff6ea;
   text-shadow: 0 0 30px rgba(255, 220, 180, .35), 0 0 6px rgba(0, 0, 0, .6);
-  text-wrap: balance;
+  opacity: var(--fade, 0);
 }
+.journey.below .j-rec, .journey.below .j-zoom, .journey.below .j-date, .journey.below .j-down,
+.journey.below .j-nav, .journey.below .j-cta { opacity: 0; pointer-events: none; }
+.j-rec, .j-zoom, .j-date, .j-nav { transition: opacity .3s linear; }
+.journey.below .j-focus { display: none; }
 
 .j-focus { left: 50%; top: 50%; width: 90px; height: 64px; transform: translate(-50%, -50%); }
 .j-focus i { position: absolute; width: 14px; height: 14px; border: 2px solid var(--ink); opacity: .8; }
@@ -869,6 +867,7 @@ body.j-locked { overflow: hidden; }
   .j-nav { bottom: 112px; }
   .journey.calm.in-camera .j-cta { bottom: 166px; }
   .j-title { font-size: 24px; top: 18px; }
+  .j-wish { top: 52px; font-size: 18px; white-space: normal; width: calc(100% - 48px); text-align: center; }
 }
 
 /* letters and voice notes on the fallback page */

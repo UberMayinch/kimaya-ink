@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=29">
   <link rel="stylesheet" href="songs.css?v=2">
   <link rel="stylesheet" href="soundtrack.css?v=1">
   <script type="importmap">
@@ -29,12 +29,14 @@
   <section class="journey" id="journey" aria-label="kimaya, through the lens">
     <div class="journey-pin">
       <img class="journey-still" src="assets/kimaya.jpg" alt="kimaya">
+      <div class="j-veil" aria-hidden="true"></div>
       <div class="j-hud">
         <span class="j-rec" aria-hidden="true">&#9679; REC</span>
         <span class="j-focus" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         <span class="j-zoom" aria-hidden="true">W <b><i></i></b> T</span>
         <span class="j-date stamp" aria-hidden="true">'26 11 03</span>
         <span class="j-title" aria-hidden="true">happy birthday kimaya</span>
+        <span class="j-wish" aria-hidden="true">happy 20th to the loveliest girl in the world</span>
         <button class="j-sound" type="button" aria-pressed="false" aria-label="sound">&#9834; OFF</button>
         <a class="j-credit" href="https://music.apple.com/us/album/pink-white/1146195596?i=1146195714&amp;uo=4" target="_blank" rel="noopener" hidden>&#9834; Pink + White &mdash; Frank Ocean</a>
         <div class="j-nav">
@@ -106,10 +108,8 @@
     </div>
   </section>
 
-  <!-- below the hero: the wish. the journey hands the page over once a lap lands on the photograph -->
-  <section class="j-below" aria-label="a wish">
-    <p class="j-wish">happy 20th to the loveliest girl in the world</p>
-  </section>
+  <!-- one screen of scroll room: scrolling it fades the photograph to black under the title and the wish -->
+  <div class="j-below" aria-hidden="true"></div>
 
   <main class="lcd">
     <!-- viewfinder corners -->
@@ -222,6 +222,6 @@
   <script src="script.js?v=7"></script>
   <script src="booth.js?v=8"></script>
   <script src="soundtrack.js?v=1"></script>
-  <script type="module" src="journey.js?v=28"></script>
+  <script type="module" src="journey.js?v=29"></script>
 </body>
 </html>

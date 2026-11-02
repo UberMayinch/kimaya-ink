@@ -29,9 +29,18 @@ jobs:
             [ -f "$f" ] || { echo "::error::missing file: $f"; exit 1; }
           done
 
+      - name: every listed clip exists and is small
+        run: |
+          jq -e 'all(.[]; (has("clip") | not) or (.clip | type == "string" and test("^photos/.+\\.mp4$")))' photos.json > /dev/null \
+            || { echo "::error::\"clip\" must be a path like photos/name.mp4"; exit 1; }
+          jq -r '.[] | select(has("clip")) | .clip' photos.json | while read -r f; do
+            [ -f "$f" ] || { echo "::error::missing clip: $f"; exit 1; }
+            [ "$(stat -c %s "$f")" -lt 3145728 ] || { echo "::error file=$f::clip is 3MB or more, please shrink it"; exit 1; }
+          done
+
       - name: photos are web-sized
         run: |
-          find photos -type f -size +2M | while read -r f; do
+          find photos -type f ! -name '*.mp4' -size +2M | while read -r f; do
             echo "::warning file=$f::over 2MB, please shrink it"
           done
 

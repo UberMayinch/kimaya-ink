@@ -17,6 +17,13 @@
   const white = $("b-white");
   let stream = null;
   let blob = null;
+  // movie mode lives in clips.js; here we only hold the result
+  const Clips = window.KimayaClips;
+  const canMovie = !!(Clips && Clips.supported());
+  let mode = "photo";
+  let clip = null;
+  let clipView = null;
+  let recStop = null;
 
   function state(name) {
     booth.dataset.state = name;
@@ -26,6 +33,7 @@
 
   function open() {
     blob = null;
+    dropClip();
     $("b-err").textContent = "";
     state("intro");
     booth.hidden = false;
@@ -39,6 +47,7 @@
   }
 
   function stop() {
+    if (recStop) recStop.abort();
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null;
     video.srcObject = null;
@@ -48,6 +57,7 @@
 
   async function start() {
     $("b-err").textContent = "";
+    dropClip();
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
@@ -73,6 +83,7 @@
       await wait(700);
     }
     $("b-count").textContent = "";
+    if (mode === "movie") return shootMovie();
 
     // the screen is the flash: go full white, let the face light up, then grab
     white.classList.add("on");
@@ -84,6 +95,44 @@
     stop();
     state("review");
     $("b-name").focus();
+  }
+
+  // ---------- movie mode ----------
+
+  function setMode(m) {
+    mode = m === "movie" && canMovie ? "movie" : "photo";
+    booth.dataset.mode = mode;
+    booth.querySelectorAll(".booth-mode button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === mode));
+  }
+
+  async function shootMovie() {
+    state("rec");
+    recStop = new AbortController();
+    try {
+      // the first frame doubles as the still (the api still wants a jpeg)
+      clip = await Clips.record(stream, { video, signal: recStop.signal, onstart: capture });
+    } catch (err) {
+      clip = null;
+      if (booth.hidden || !stream) return;
+      $("b-err").textContent = err.message === "clip too big" ? "that clip came out too big, try again." : "movie mode failed here, try photo.";
+      state("live");
+      return;
+    } finally {
+      recStop = null;
+    }
+    clipView = Clips.player(URL.createObjectURL(clip), { poster: shot.src });
+    shot.after(clipView);
+    stop();
+    state("review");
+    $("b-name").focus();
+  }
+
+  function dropClip() {
+    clip = null;
+    if (!clipView) return;
+    URL.revokeObjectURL(clipView.src);
+    clipView.remove();
+    clipView = null;
   }
 
   function capture() {
@@ -185,6 +234,7 @@
       form.append("name", name);
       form.append("message", message);
       form.append("photo", blob, "shot.jpg");
+      if (clip) form.append("clip", clip, clip.type.includes("mp4") ? "clip.mp4" : "clip.webm");
       form.append("token", await token());
       const r = await fetch(`${API}/posts`, { method: "POST", body: form });
       const data = await r.json().catch(() => ({}));
@@ -222,11 +272,18 @@
         fig.style.setProperty("--tilt", `${((i * 53) % 7) - 3}deg`);
         const frame = document.createElement("div");
         frame.className = "frame";
+        const id = encodeURIComponent(p.id);
         const img = document.createElement("img");
-        img.src = `${API}/photo/${encodeURIComponent(p.id)}`;
+        img.src = `${API}/photo/${id}`;
         img.alt = `${p.name}'s picture`;
         img.loading = "lazy";
-        frame.append(img);
+        if (p.has_clip && Clips) {
+          const v = Clips.player(`${API}/clip/${id}`, { poster: img.src });
+          v.setAttribute("aria-label", img.alt);
+          frame.append(v);
+        } else {
+          frame.append(img);
+        }
         const cap = document.createElement("figcaption");
         cap.className = "label";
         cap.textContent = p.message;
@@ -251,6 +308,9 @@
   $("b-retake").addEventListener("click", start);
   $("b-again").addEventListener("click", open);
   $("b-form").addEventListener("submit", send);
+  booth.querySelectorAll(".booth-mode button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  booth.classList.toggle("no-movie", !canMovie);
+  setMode("photo");
   $("b-msg").addEventListener("input", (e) => {
     $("b-left").textContent = 140 - e.target.value.length;
   });

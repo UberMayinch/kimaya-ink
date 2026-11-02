@@ -21,6 +21,10 @@ function flash() {
 
 let photos = [];
 let current = 0;
+let vClip = null; // viewer's movie player, made on first use
+
+// curated clips: "clip" in photos.json, "file" doubles as the poster
+const hasClip = (p) => !!(p.clip && window.KimayaClips);
 
 function render() {
   const roll = $("roll");
@@ -51,7 +55,7 @@ function render() {
     const s = document.createElement("span");
     s.className = "stamp";
     s.textContent = stamp(p.date);
-    frame.append(img, s);
+    frame.append(hasClip(p) ? KimayaClips.player(p.clip, { poster: p.file }) : img, s);
 
     const label = document.createElement("span");
     label.className = "label";
@@ -68,6 +72,7 @@ function show(i) {
   const p = photos[current];
   $("v-img").src = p.file;
   $("v-img").alt = p.caption || "";
+  showClip(hasClip(p) ? p : null);
   $("v-stamp").textContent = stamp(p.date);
   $("v-name").textContent = dscName(current);
   $("v-pos").textContent = `${current + 1}/${photos.length}`;
@@ -81,6 +86,28 @@ function show(i) {
   }
 }
 
+function showClip(p) {
+  if (!p) {
+    $("v-img").hidden = false;
+    if (vClip) {
+      vClip.pause();
+      vClip.hidden = true;
+      vClip.removeAttribute("src");
+      vClip.load();
+    }
+    return;
+  }
+  if (!vClip) {
+    vClip = KimayaClips.player("");
+    $("v-img").after(vClip);
+  }
+  vClip.poster = p.file;
+  vClip.src = p.clip;
+  vClip.hidden = false;
+  $("v-img").hidden = true;
+  vClip.play().catch(() => {});
+}
+
 function open(i) {
   flash();
   show(i);
@@ -90,6 +117,7 @@ function open(i) {
 
 function close() {
   $("viewer").hidden = true;
+  showClip(null);
 }
 
 $("v-prev").addEventListener("click", () => show(current - 1));

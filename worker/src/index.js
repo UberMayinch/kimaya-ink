@@ -1,15 +1,18 @@
 // kimaya.ink guestbook: visitors post a selfie + short note, nothing shows until approved.
 //
-// POST   /api/posts                  multipart: name, message, photo (jpeg), token (turnstile)
-// GET    /api/posts                  approved posts, newest first
+// POST   /api/posts                  multipart: name, message, photo (jpeg), token (turnstile), clip (optional webm/mp4)
+// GET    /api/posts                  approved posts, newest first, with has_clip
 // GET    /api/photo/:id              jpeg, approved only
+// GET    /api/clip/:id               webm/mp4, approved only, supports Range
 // GET    /api/admin/pending          Bearer ADMIN_TOKEN
 // GET    /api/admin/photo/:id        Bearer ADMIN_TOKEN, any status
+// GET    /api/admin/clip/:id         Bearer ADMIN_TOKEN, any status
 // POST   /api/admin/posts/:id/approve
 // DELETE /api/admin/posts/:id
 
 const MAX_PHOTO = 200 * 1024;
-const MAX_BODY = MAX_PHOTO + 8 * 1024;
+const MAX_CLIP = 800 * 1024;
+const MAX_BODY = MAX_PHOTO + MAX_CLIP + 8 * 1024;
 const MAX_NAME = 24;
 const MAX_MESSAGE = 140;
 const PER_IP_PER_HOUR = 3;
@@ -46,10 +49,15 @@ async function route(req, env) {
     return photo(env, parts[2], false);
   }
 
+  if (parts[1] === "clip" && parts.length === 3 && req.method === "GET") {
+    return clip(req, env, parts[2], false);
+  }
+
   if (parts[1] === "admin") {
     if (!isAdmin(req, env)) return json({ error: "unauthorized" }, 401);
     if (parts[2] === "pending" && req.method === "GET") return listPending(env);
     if (parts[2] === "photo" && parts[3] && req.method === "GET") return photo(env, parts[3], true);
+    if (parts[2] === "clip" && parts[3] && req.method === "GET") return clip(req, env, parts[3], true);
     if (parts[2] === "posts" && parts[3]) {
       if (parts[4] === "approve" && req.method === "POST") return setStatus(env, parts[3], "approved");
       if (!parts[4] && req.method === "DELETE") return remove(env, parts[3]);
@@ -63,9 +71,9 @@ async function route(req, env) {
 
 async function listApproved(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, name, message, created_at FROM posts WHERE status = 'approved' ORDER BY created_at DESC LIMIT 60"
+    "SELECT id, name, message, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'approved' ORDER BY created_at DESC LIMIT 60"
   ).all();
-  return json({ posts: results }, 200, { "Cache-Control": "public, max-age=30" });
+  return json({ posts: results.map(withClipFlag) }, 200, { "Cache-Control": "public, max-age=30" });
 }
 
 async function photo(env, id, admin) {
@@ -80,6 +88,36 @@ async function photo(env, id, admin) {
       "Content-Type": "image/jpeg",
       "Cache-Control": admin ? "no-store" : "public, max-age=86400",
     },
+  });
+}
+
+// short looping movie clip. safari won't play video without Range support.
+async function clip(req, env, id, admin) {
+  const row = await env.DB.prepare(
+    admin
+      ? "SELECT clip, clip_type FROM posts WHERE id = ? AND clip IS NOT NULL"
+      : "SELECT clip, clip_type FROM posts WHERE id = ? AND status = 'approved' AND clip IS NOT NULL"
+  )
+    .bind(id)
+    .first();
+  if (!row) return json({ error: "not found" }, 404);
+
+  const bytes = toBytes(row.clip);
+  const total = bytes.length;
+  const headers = {
+    "Content-Type": row.clip_type === "video/mp4" ? "video/mp4" : "video/webm",
+    "Cache-Control": admin ? "no-store" : "public, max-age=86400",
+    "Accept-Ranges": "bytes",
+  };
+
+  const range = req.headers.get("Range");
+  if (!range) return new Response(bytes, { headers });
+
+  const r = parseRange(range, total);
+  if (!r) return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${total}` } });
+  return new Response(bytes.slice(r.start, r.end + 1), {
+    status: 206,
+    headers: { ...headers, "Content-Range": `bytes ${r.start}-${r.end}/${total}` },
   });
 }
 
@@ -110,6 +148,18 @@ async function createPost(req, env) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return json({ error: "photo must be jpeg" }, 415);
 
+  // optional movie clip, sniffed by magic bytes (the client's type is ignored)
+  let clipBytes = null;
+  let clipType = null;
+  const movie = form.get("clip");
+  if (movie !== null) {
+    if (typeof movie === "string") return json({ error: "bad clip" }, 400);
+    if (movie.size > MAX_CLIP) return json({ error: "clip too big" }, 413);
+    clipBytes = new Uint8Array(await movie.arrayBuffer());
+    clipType = sniffClip(clipBytes);
+    if (!clipType) return json({ error: "clip must be webm or mp4" }, 415);
+  }
+
   const ipHash = await sha256(`${env.IP_SALT || ""}:${ip}`);
   const since = Date.now() - HOUR;
 
@@ -122,9 +172,9 @@ async function createPost(req, env) {
 
   const id = crypto.randomUUID();
   await env.DB.prepare(
-    "INSERT INTO posts (id, name, message, photo, ip_hash, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)"
+    "INSERT INTO posts (id, name, message, photo, clip, clip_type, ip_hash, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)"
   )
-    .bind(id, name, message, bytes, ipHash, Date.now())
+    .bind(id, name, message, bytes, clipBytes, clipType, ipHash, Date.now())
     .run();
 
   return json({ ok: true, status: "pending" }, 201);
@@ -134,9 +184,9 @@ async function createPost(req, env) {
 
 async function listPending(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, name, message, created_at FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
+    "SELECT id, name, message, created_at, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
   ).all();
-  return json({ posts: results }, 200, { "Cache-Control": "no-store" });
+  return json({ posts: results.map(withClipFlag) }, 200, { "Cache-Control": "no-store" });
 }
 
 async function setStatus(env, id, status) {
@@ -176,6 +226,33 @@ function clean(v, max) {
   return v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+function sniffClip(b) {
+  if (b.length < 12) return null;
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return "video/webm";
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "video/mp4"; // "ftyp"
+  return null;
+}
+
+// "bytes=a-b", "bytes=a-", "bytes=-n" -> { start, end } inclusive, or null if unsatisfiable
+function parseRange(header, total) {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (!m[1] && !m[2]) || !total) return null;
+  let start, end;
+  if (!m[1]) {
+    start = Math.max(0, total - Number(m[2]));
+    end = total - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+  }
+  if (start > end || start >= total) return null;
+  return { start, end };
+}
+
+function withClipFlag(p) {
+  return { ...p, has_clip: !!p.has_clip };
+}
+
 function toBytes(v) {
   if (v instanceof Uint8Array) return v;
   if (v instanceof ArrayBuffer) return new Uint8Array(v);
@@ -204,7 +281,8 @@ function corsHeaders(req, env) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, Range",
+    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };

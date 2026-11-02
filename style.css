@@ -746,3 +746,7 @@ body.j-locked .journey-pin { position: fixed; inset: 0; height: 100svh; z-index:
 .journey.focused[data-lcd="play"] .j-song { display: block; }
 /* the camera's own buttons drive it now */
 .j-prev, .j-next { display: none !important; }
+
+/* while the journey runs, the camera is the gallery and the booth; the old ones are the fallback */
+.journey.live ~ main .roll,
+.journey.live ~ main .guestbook { display: none; }

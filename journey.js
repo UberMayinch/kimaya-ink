@@ -805,7 +805,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, stickerImg, fig, figBuf) {
 
   // ---------- focus mode: the LCD fills the page ----------
 
-  const focus = { on: false, t: 0, savedY: 0 };
+  const focus = { on: false, t: 0, savedY: 0, since: 0 };
 
   // the whole back, face on, so its buttons are in reach
   function lcdPose(outPos, outLook) {
@@ -816,6 +816,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, stickerImg, fig, figBuf) {
   function enterFocus() {
     if (focus.on) return;
     focus.on = true;
+    focus.since = performance.now();
     focus.savedY = scrollY;
     document.body.style.top = `-${focus.savedY}px`;
     document.body.classList.add("j-locked");
@@ -884,6 +885,8 @@ function init(THREE, RoundedBoxGeometry, photoImg, stickerImg, fig, figBuf) {
   });
   pin.addEventListener("click", (e) => {
     if (!focus.on || e.target.closest("button, a, input, textarea, form")) return;
+    // the click that opened focus mode (or one mid-zoom) shouldn't land on a camera button
+    if (focus.t < 0.9 || performance.now() - focus.since < 400) return;
     const hit = hitButton(e);
     if (hit) press(hit);
   });

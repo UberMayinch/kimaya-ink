@@ -107,6 +107,12 @@ document.addEventListener("keydown", (e) => {
 
 $("today").textContent = stamp();
 
+// 3D hero lives in camera.js; if it never comes up, fall back to the flat title
+setTimeout(() => {
+  const stage = $("stage");
+  if (stage && !stage.classList.contains("live")) stage.classList.add("dead");
+}, 8000);
+
 fetch("photos.json", { cache: "no-cache" })
   .then((r) => r.json())
   .then((list) => {

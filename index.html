@@ -11,6 +11,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/"
+      }
+    }
+  </script>
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -30,6 +38,9 @@
     </header>
 
     <section class="hero">
+      <div class="stage" id="stage" title="click for flash">
+        <span class="stage-msg">FOCUSING&hellip;</span>
+      </div>
       <h1 class="title" data-text="kimaya">kimaya</h1>
       <p class="sub">a little memory card, always full</p>
     </section>
@@ -60,5 +71,6 @@
   </div>
 
   <script src="script.js"></script>
+  <script type="module" src="camera.js"></script>
 </body>
 </html>

@@ -9,8 +9,8 @@
 //     -> { lcd, items, open(), close(), isOpen(), t, view, sel, select(i), step(dir), onAction(action, hit),
 //          drawLCD(), live(), rec, tick(now), srText }
 
-import { loadArchive, letterParagraphs } from "./archive-data.js?v=32";
-import { stampOf, wait } from "./util.js?v=32";
+import { loadArchive, letterParagraphs } from "./archive-data.js?v=33";
+import { stampOf, wait } from "./util.js?v=33";
 
 const W = 640, H = 480;
 const LEFT = 104; // the top-left of the screen sits under her sticker
@@ -234,7 +234,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     mark();
   }
   function stopClip() {
-    if (!playVideo.muted) { playVideo.muted = true; duck(false); }
+    if (!playVideo.muted) { playVideo.muted = true; duck(false); window.KimayaSongs?.accompany?.(null, false); }
     if (!playVideo.dataset.src) return;
     playVideo.pause();
     playVideo.removeAttribute("src");
@@ -249,14 +249,17 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
       playVideo.currentTime = 0;
       playVideo.play().catch(() => {});
       duck(true);
+      const song = current()?.song;
+      if (song && window.KimayaSongs?.accompany) window.KimayaSongs.accompany(song, true); // quietly, under the clip
     } else {
       playVideo.muted = true;
       duck(false);
+      window.KimayaSongs?.accompany?.(null, false);
     }
     announce();
     mark();
   }
-  window.addEventListener("kimaya:audio-claim", (e) => { if (e.detail !== "clip" && !playVideo.muted) { playVideo.muted = true; duck(false); announce(); } });
+  window.addEventListener("kimaya:audio-claim", (e) => { if (e.detail !== "clip" && !playVideo.muted) { playVideo.muted = true; duck(false); window.KimayaSongs?.accompany?.(null, false); announce(); } });
   function toIndex() {
     stopAudio();
     stopClip();

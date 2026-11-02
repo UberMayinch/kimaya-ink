@@ -5,6 +5,8 @@
 // events on window:
 //   kimaya:song         detail { state: "playing" | "paused" | "ended", song }
 //   kimaya:audio-claim  dispatch this from anything else that wants the speakers; songs pause
+// a clip with a song: KimayaSongs.accompany(song, true) after the claim plays it quietly underneath,
+// accompany(null, false) when the clip goes quiet again
 
 (() => {
   const API = "https://itunes.apple.com/";
@@ -225,9 +227,20 @@
     });
   }
 
+  // the song under a clip's own sound: quieter, and looping while the clip loops
+  const UNDER = 0.35;
+  let under = false;
+  function fullVoice(a) {
+    if (!under) return;
+    under = false;
+    a.loop = false;
+    a.volume = 1;
+  }
+
   function play(s) {
     if (!s || !s.previewUrl) return Promise.reject(new Error("nothing to play"));
     const a = player();
+    fullVoice(a);
     if (!cur || cur.previewUrl !== s.previewUrl) {
       // switching: drop the old song's pause so a ducked soundtrack doesn't pop back up
       if (cur && !a.paused) swallowPause = true;
@@ -250,6 +263,29 @@
 
   function pause() {
     if (audio && !audio.paused) audio.pause();
+  }
+
+  // accompany(song, true): play it quietly under something else that makes sound (a clip);
+  // accompany(null, false): that something stopped, so the song stops too
+  let underSeq = 0;
+  function accompany(song, on) {
+    underSeq++; // a stop while the lookup is still out cancels that start
+    if (!on) {
+      if (!under) return Promise.resolve();
+      fullVoice(audio);
+      pause();
+      return Promise.resolve();
+    }
+    const my = underSeq;
+    return resolve(song).then((s) => {
+      if (my !== underSeq) return;
+      const p = isOn(s) ? Promise.resolve() : play(s);
+      const a = player();
+      under = true;
+      a.loop = true;
+      a.volume = UNDER;
+      return p;
+    });
   }
 
   const isOn = (s) => !!(audio && cur && s && cur.previewUrl === s.previewUrl && !audio.paused && !audio.ended);
@@ -604,6 +640,6 @@
     return { el: wrap, input, value, set, reset };
   }
 
-  const api = { resolve, play, pause, toggle, current, chip, picker, search, transport: "fetch" };
+  const api = { resolve, play, pause, toggle, accompany, current, chip, picker, search, transport: "fetch" };
   window.KimayaSongs = api;
 })();

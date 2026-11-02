@@ -73,7 +73,7 @@ function render() {
     const s = document.createElement("span");
     s.className = "stamp";
     s.textContent = stamp(p.date);
-    frame.append(hasClip(p) ? KimayaClips.player(p.clip, { poster: p.file }) : img, s);
+    frame.append(hasClip(p) ? KimayaClips.player(p.clip, { poster: p.file, song: p.song }) : img, s);
 
     const label = document.createElement("span");
     label.className = "label";
@@ -143,6 +143,7 @@ function showClip(p) {
   if (!p) {
     $("v-img").hidden = false;
     if (vClip) {
+      vClip.quiet();
       vClip.pause();
       vClip.hidden = true;
       vClip.removeAttribute("src");
@@ -151,9 +152,10 @@ function showClip(p) {
     return;
   }
   if (!vClip) {
-    vClip = KimayaClips.player("");
+    vClip = KimayaClips.player("", { song: () => viewable[current]?.song });
     $("v-img").after(vClip);
   }
+  vClip.quiet();
   vClip.poster = p.file;
   vClip.src = p.clip;
   vClip.hidden = false;

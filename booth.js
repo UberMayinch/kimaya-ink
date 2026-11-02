@@ -322,7 +322,7 @@
         img.alt = p.name ? `${p.name}'s picture` : p.message || "a picture";
         img.loading = "lazy";
         if (p.has_clip && Clips) {
-          const v = Clips.player(`${API}/clip/${id}`, { poster: img.src });
+          const v = Clips.player(`${API}/clip/${id}`, { poster: img.src, song: p.song }); // its song plays quietly under the clip
           v.setAttribute("aria-label", img.alt);
           frame.append(v);
         } else {

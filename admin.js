@@ -37,7 +37,7 @@ function card(p, pending) {
   const id = encodeURIComponent(p.id);
   // movie posts loop their clip instead of the still
   const movie = p.has_clip && window.KimayaClips;
-  const pic = movie ? KimayaClips.player("") : document.createElement("img");
+  const pic = movie ? KimayaClips.player("", { song: () => song.value() }) : document.createElement("img"); // the whole thing: clip + the song picked below
   if (!movie) pic.alt = "";
   media(`/admin/photo/${id}`, (url) => { movie ? (pic.poster = url) : (pic.src = url); });
   if (movie) media(`/admin/clip/${id}`, (url) => { pic.src = url; });

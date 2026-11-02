@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=32";
-import { createInput } from "./experience/input.js?v=32";
-import { createPortrait } from "./experience/portrait.js?v=32";
-import { createCameraWorld } from "./experience/camera-world.js?v=32";
-import { createArchive } from "./experience/archive.js?v=32";
-import { createPost } from "./experience/post.js?v=32";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=32";
+import { createController, stateAt, R } from "./experience/controller.js?v=33";
+import { createInput } from "./experience/input.js?v=33";
+import { createPortrait } from "./experience/portrait.js?v=33";
+import { createCameraWorld } from "./experience/camera-world.js?v=33";
+import { createArchive } from "./experience/archive.js?v=33";
+import { createPost } from "./experience/post.js?v=33";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=33";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");

@@ -8,7 +8,8 @@
 //           mirror   default true, flip like a selfie preview
 //           signal   AbortSignal, stops early and rejects
 //           onstart(canvas)  called once the first frame is drawn, right before recording
-//   KimayaClips.player(src, { poster })     -> <video> for prints, muted + looping
+//   KimayaClips.player(src, { poster, song })  -> <video> for prints, muted + looping; a tap gives it sound,
+//     and the song (object, or a function returning one) plays quietly underneath. v.quiet() mutes it again.
 
 (() => {
   // types that carry sound first; the bare ones still take an audio track where the browser allows
@@ -186,8 +187,12 @@
     v.disablePictureInPicture = true;
     if (opts.poster) v.poster = opts.poster;
     if (src) v.src = src;
-    // a tap turns the sound on (and off again); anything else that starts playing sound mutes it
+    // a tap turns the sound on (and off again); anything else that starts playing sound mutes it.
+    // with a song on the post, the song plays quietly under the clip's own sound.
+    const song = () => (typeof opts.song === "function" ? opts.song() : opts.song) || null;
+    const songOn = (on) => { const s = song(); if (window.KimayaSongs?.accompany && (s || !on)) window.KimayaSongs.accompany(s, on); };
     v.title = "tap for sound";
+    v.quiet = () => { if (!v.muted) { v.muted = true; songOn(false); } };
     v.addEventListener("click", (e) => {
       e.stopPropagation();
       if (v.muted) {
@@ -196,17 +201,18 @@
         v.muted = false;
         v.currentTime = 0;
         v.play().catch(() => {});
+        songOn(true);
       } else {
-        v.muted = true;
+        v.quiet();
       }
     });
-    window.addEventListener("kimaya:audio-claim", () => { v.muted = true; });
+    window.addEventListener("kimaya:audio-claim", v.quiet);
 
     // only spend cpu on clips that are on screen
     if ("IntersectionObserver" in window) {
       new IntersectionObserver(([e]) => {
         if (e.isIntersecting) v.play().catch(() => {});
-        else v.pause();
+        else { v.quiet(); v.pause(); }
       }).observe(v);
     }
     return v;

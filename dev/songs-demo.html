@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>songs demo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../songs.css">
+  <style>
+    :root {
+      --ink: #e9e6df; --dim: #8a8780; --stamp: #ff8a1f; --hud: #9fe8c8;
+      --serif: "Instrument Serif", serif; --mono: "VT323", ui-monospace, monospace;
+    }
+    body { margin: 0; padding: 24px; background: #0b0b0c; color: var(--ink); font: 20px var(--mono); }
+    h1 { margin: 0 0 4px; color: var(--hud); font-weight: 400; letter-spacing: .1em; }
+    p { margin: 0 0 18px; color: var(--dim); }
+    .row { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
+    .print { width: 220px; padding: 10px; background: #f4f1ea; color: #2a2724; --song-link: #6b665e; transform: rotate(-2deg); }
+    .print .photo { aspect-ratio: 4 / 3; background: linear-gradient(135deg, #3a2b40, #c06a3a); }
+    .print .label { display: block; margin: 6px 2px 8px; font: italic 17px var(--serif); }
+    .print .song-chip { display: flex; }
+    button.claim { all: unset; cursor: pointer; padding: 2px 10px; border: 1px solid #555; color: var(--dim); }
+    #log { white-space: pre-wrap; color: var(--dim); font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>&#9834; SONGS DEMO</h1>
+  <p>resolve + play test for songs.js. add <code>?jsonp</code> to force the jsonp transport.</p>
+
+  <div class="row" id="screen"></div>
+  <div class="row" id="prints"></div>
+
+  <div class="row">
+    <button class="claim" id="claim">dispatch kimaya:audio-claim</button>
+  </div>
+  <div id="log"></div>
+
+  <script src="../songs.js"></script>
+  <script>
+    const S = window.KimayaSongs;
+    if (new URLSearchParams(location.search).has("jsonp")) S.transport = "jsonp";
+
+    const songs = [
+      { title: "Pink + White", artist: "Frank Ocean" },
+      { title: "Here Comes the Sun", artist: "The Beatles" },
+      { title: "Dreams", artist: "Fleetwood Mac" },
+      { title: "Crazy in Love", artist: "Beyoncé" },
+      { title: "Moonlight", artist: "Ariana Grande", itunesId: 1440843781 },
+      { title: "a song that isn't real", artist: "nobody at all" },
+    ];
+
+    const log = (msg) => {
+      const el = document.getElementById("log");
+      el.textContent = `${new Date().toLocaleTimeString()}  ${msg}\n` + el.textContent;
+    };
+
+    songs.forEach((s) => document.getElementById("screen").append(S.chip(s)));
+
+    songs.slice(0, 3).forEach((s, i) => {
+      const print = document.createElement("div");
+      print.className = "print";
+      const photo = document.createElement("div");
+      photo.className = "photo";
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = ["the long drive", "sunday", "her kitchen"][i];
+      print.append(photo, label, S.chip(s));
+      document.getElementById("prints").append(print);
+    });
+
+    songs.forEach((s) =>
+      S.resolve(s).then(
+        (r) => log(`resolved "${s.title}" -> ${r.title} / ${r.artist} (${r.trackId})`),
+        (e) => log(`no preview for "${s.title}": ${e.message}`)
+      )
+    );
+
+    window.addEventListener("kimaya:song", (e) => log(`kimaya:song ${e.detail.state} ${e.detail.song ? e.detail.song.title : ""}`));
+    document.getElementById("claim").addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("kimaya:audio-claim", { detail: { source: "demo" } }));
+    });
+  </script>
+</body>
+</html>

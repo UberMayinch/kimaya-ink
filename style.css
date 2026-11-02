@@ -292,6 +292,16 @@ body {
   text-overflow: ellipsis;
 }
 
+/* print with a song (chip styles live in songs.css) */
+.shot { --song-link: #6b665e; }
+.shot.has-song { cursor: default; padding-bottom: 10px; }
+.shot.has-song:focus-within { transform: rotate(0deg) scale(1.03); }
+.shot-open { all: unset; display: block; cursor: pointer; }
+.shot-open:focus-visible { outline: 2px solid var(--stamp); outline-offset: 4px; }
+.shot.has-song .label { position: static; display: block; margin: 6px 2px 8px; }
+.shot.has-song .song-chip { display: flex; }
+.viewer figcaption .song-chip { display: flex; width: fit-content; margin: 10px auto 0; align-items: center; }
+
 /* ---------- empty card ---------- */
 
 .empty {

@@ -16,11 +16,14 @@ Everything goes through a pull request. Only @UberMayinch merges to `main`, and 
        "file": "photos/IMG_1234.jpg",
        "date": "2026-11-02",
        "caption": "optional, shows under the print",
-       "by": "optional, your name"
+       "by": "optional, your name",
+       "song": { "title": "Pink + White", "artist": "Frank Ocean" }
      }
    ]
    ```
    `file` and `date` are required. `date` is `YYYY-MM-DD` and becomes the orange stamp. Watch for trailing commas, JSON hates them.
+
+   `song` is optional: the song that goes with the photo. It shows as a little `♪ title — artist` chip on the print and in the viewer, and plays Apple's 30-second preview with a link to the full track in Apple Music. Write `title` and `artist` the way Apple Music does. If it picks the wrong version (a cover, a live take), pin it with `"itunesId": 1146195714`, the number after `?i=` in the Apple Music song link. Never commit audio files; the preview streams from Apple.
 3. Open a PR. CI checks the JSON and that every file exists.
 
 ## preview locally
@@ -38,6 +41,9 @@ python3 -m http.server 8000
 index.html      page
 style.css       the digicam look
 script.js       renders photos.json
+songs.js        song chips + preview player (window.KimayaSongs)
+songs.css       song chip look
+dev/            test pages, e.g. dev/songs-demo.html
 photos.json     list of photos
 photos/         the images
 CNAME           custom domain
@@ -45,7 +51,7 @@ CNAME           custom domain
 
 ## changing css/js
 
-GitHub Pages caches files for ~10 minutes. When you change `style.css`, `script.js` or `camera.js`, bump the `?v=` number on its tag in `index.html` so visitors don't get new HTML with old styles.
+GitHub Pages caches files for ~10 minutes. When you change `style.css`, `script.js`, `camera.js`, `songs.js` or `songs.css`, bump the `?v=` number on its tag in `index.html` so visitors don't get new HTML with old styles.
 
 ## guestbook backend
 

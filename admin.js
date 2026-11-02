@@ -37,19 +37,36 @@ function card(p, pending) {
   const id = encodeURIComponent(p.id);
   // movie posts loop their clip instead of the still
   const movie = p.has_clip && window.KimayaClips;
-  const pic = movie ? KimayaClips.player("", { song: () => song.value() }) : document.createElement("img"); // the whole thing: clip + the song picked below
-  if (!movie) pic.alt = "";
-  media(`/admin/photo/${id}`, (url) => { movie ? (pic.poster = url) : (pic.src = url); });
-  if (movie) media(`/admin/clip/${id}`, (url) => { pic.src = url; });
+  const letter = !!p.text;
+  let pic;
+  if (letter) {
+    // a note: the words, on paper
+    pic = document.createElement("div");
+    pic.className = "note";
+    const t = document.createElement("p");
+    t.className = "note-text";
+    t.textContent = p.text;
+    pic.append(t);
+  } else {
+    pic = movie ? KimayaClips.player("", { song: () => song.value() }) : document.createElement("img"); // the whole thing: clip + the song picked below
+    if (!movie) pic.alt = "";
+    media(`/admin/photo/${id}`, (url) => { movie ? (pic.poster = url) : (pic.src = url); });
+    if (movie) media(`/admin/clip/${id}`, (url) => { pic.src = url; });
+  }
   // everything written on the post can be changed here and saved
   const form = document.createElement("form");
   form.className = "edit";
   const name = field("name", 24, p.name || "");
   const msg = document.createElement("textarea");
-  msg.placeholder = "note";
+  msg.placeholder = letter ? "title (optional)" : "note";
   msg.maxLength = 140;
-  msg.rows = 2;
+  msg.rows = letter ? 1 : 2;
   msg.value = p.message || "";
+  const text = document.createElement("textarea");
+  text.placeholder = "the note";
+  text.maxLength = 1200;
+  text.rows = 6;
+  text.value = p.text || "";
   const date = field("", 0, p.taken_on || "");
   date.type = "date";
   date.min = "1900-01-01";
@@ -66,7 +83,7 @@ function card(p, pending) {
   line1.append(name, date);
   const line2 = document.createElement("div");
   line2.append(song.el);
-  form.append(msg, line1, line2, songPreview(song), save, state);
+  form.append(...(letter ? [text] : []), msg, line1, line2, songPreview(song), save, state);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     save.disabled = true;
@@ -75,7 +92,7 @@ function card(p, pending) {
       const r = await call(`/admin/posts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.value.trim(), message: msg.value.trim(), taken_on: date.value || null, song: song.value() }),
+        body: JSON.stringify({ name: name.value.trim(), message: msg.value.trim(), taken_on: date.value || null, song: song.value(), ...(letter ? { text: text.value } : {}) }),
       });
       const { post } = await r.json();
       state.textContent = `saved · ${post.taken_on ? KimayaUploads.stamp(post.taken_on) + " · " : ""}${post.song ? `♪ ${post.song.title}${post.song.artist ? " — " + post.song.artist : ""}` : "no song"}`;

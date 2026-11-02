@@ -3,7 +3,8 @@
 
 (() => {
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const API = LOCAL ? "http://localhost:8787/api" : "https://kimaya-guestbook.kimaya-ink.workers.dev/api";
+  // the same api as guestbook-api.js (which also honours ?api= on localhost)
+  const API = (window.KimayaGuestbook && window.KimayaGuestbook.API) || (LOCAL ? "http://localhost:8787/api" : "https://kimaya-guestbook.kimaya-ink.workers.dev/api");
   // localhost uses cloudflare's always-pass test key
   const SITEKEY = LOCAL ? "1x00000000000000000000AA" : "0x4AAAAAAFwc3Ol-4BaBxvkn";
 
@@ -67,7 +68,21 @@
     shotUrl = null;
     if (picker) picker.reset();
     if (window.KimayaUploads) KimayaUploads.preview($("b-up"), null);
-    $("b-retake").textContent = source === "upload" ? "↺ PICK AGAIN" : "↺ RETAKE";
+    $("b-retake").textContent = source === "upload" ? "↺ PICK AGAIN" : source === "write" ? "◀ BACK" : "↺ RETAKE";
+    // the same form writes a note (longer) or captions a picture
+    const msg = $("b-msg");
+    msg.maxLength = source === "write" ? 1200 : 140;
+    msg.rows = source === "write" ? 6 : 2;
+    $("b-left").textContent = msg.maxLength - msg.value.length;
+  }
+
+  // a note instead of a picture: just words, one more kind of memory
+  function write() {
+    stop();
+    reset("write");
+    $("b-err").textContent = "";
+    state("write");
+    $("b-msg").focus();
   }
 
   function uploaded(result) {
@@ -260,7 +275,8 @@
     e.preventDefault();
     const name = $("b-name").value.trim();
     const message = $("b-msg").value.trim();
-    if (!blob || !name || !message) return;
+    const writing = booth.dataset.source === "write";
+    if ((!writing && !blob) || !name || !message) return;
 
     const btn = $("b-send");
     btn.disabled = true;
@@ -268,10 +284,15 @@
     try {
       const form = new FormData();
       form.append("name", name);
-      form.append("message", message);
-      form.append("photo", blob, "shot.jpg");
-      if (clip) form.append("clip", clip, clip.type.includes("mp4") ? "clip.mp4" : "clip.webm");
-      if (takenOn) form.append("taken_on", takenOn);
+      if (writing) {
+        form.append("message", "");
+        form.append("text", message);
+      } else {
+        form.append("message", message);
+        form.append("photo", blob, "shot.jpg");
+        if (clip) form.append("clip", clip, clip.type.includes("mp4") ? "clip.mp4" : "clip.webm");
+        if (takenOn) form.append("taken_on", takenOn);
+      }
       const song = songPick ? songPick.value() : null;
       if (song) {
         form.append("song_title", song.title);
@@ -286,7 +307,7 @@
       $("b-name").value = "";
       $("b-msg").value = "";
       if (songPick) songPick.reset();
-      $("b-left").textContent = "140";
+      $("b-left").textContent = String($("b-msg").maxLength);
     } catch (err) {
       $("b-err").textContent = `${err.message}.`;
     } finally {
@@ -321,7 +342,14 @@
         img.src = `${API}/photo/${encodeURIComponent(p.id)}`;
         img.alt = p.name ? `${p.name}'s picture` : p.message || "a picture";
         img.loading = "lazy";
-        if (p.has_clip && Clips) {
+        if (p.text) {
+          // a note: paper, the words on it
+          frame.classList.add("note-frame");
+          const txt = document.createElement("p");
+          txt.className = "note-text";
+          txt.textContent = p.text;
+          frame.append(txt);
+        } else if (p.has_clip && Clips) {
           const v = Clips.player(`${API}/clip/${id}`, { poster: img.src, song: p.song }); // its song plays quietly under the clip
           v.setAttribute("aria-label", img.alt);
           frame.append(v);
@@ -330,7 +358,7 @@
         }
         const cap = document.createElement("figcaption");
         cap.className = "label";
-        cap.textContent = p.message;
+        cap.textContent = p.text ? p.message || "a note" : p.message;
         // owner uploads may have no name or caption; taken_on is the print's date
         const by = document.createElement("small");
         if (p.name) by.textContent = `— ${p.name}`;
@@ -356,15 +384,16 @@
   window.addEventListener("kimaya:booth", open);
   $("b-close").addEventListener("click", close);
   $("b-start").addEventListener("click", start);
+  $("b-write").addEventListener("click", write);
   $("b-shutter").addEventListener("click", shoot);
-  $("b-retake").addEventListener("click", () => (booth.dataset.source === "upload" ? open() : start()));
+  $("b-retake").addEventListener("click", () => (booth.dataset.source === "camera" ? start() : open()));
   $("b-again").addEventListener("click", open);
   $("b-form").addEventListener("submit", send);
   booth.querySelectorAll(".booth-mode button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
   booth.classList.toggle("no-movie", !canMovie);
   setMode("photo");
   $("b-msg").addEventListener("input", (e) => {
-    $("b-left").textContent = 140 - e.target.value.length;
+    $("b-left").textContent = e.target.maxLength - e.target.value.length;
   });
   document.addEventListener("keydown", (e) => {
     if (booth.hidden) return;

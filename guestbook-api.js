@@ -1,6 +1,7 @@
 // guestbook api client shared by the camera LCD and the fallback booth.
 // window.KimayaGuestbook: { API, list(), photoURL(id), clipURL(id), post(fields), postMany(fields) }
 //   post({ name, message, photo, clip?, takenOn?, song? })  song: { title, artist, itunesId? } (optional)
+//   post({ name, text, message?, song? })  a letter: words, no picture (message is its title)
 //   postMany({ name, message, items: [{ photo, clip?, takenOn?, message? }], onProgress? })
 //     several at once in one request (one verification, one turn of the per-ip limit); an item's own
 //     message replaces the shared one. resolves { ok, status, count }
@@ -68,11 +69,16 @@
     return data;
   }
 
-  async function post({ name, message, photo, clip, takenOn, song }) {
+  async function post({ name, message, text, photo, clip, takenOn, song }) {
     const form = new FormData();
     form.append("name", name);
-    form.append("message", message);
-    fill(form, { photo, clip, takenOn });
+    form.append("message", message || "");
+    if (text && !photo) {
+      form.append("text", text);
+      if (takenOn) form.append("taken_on", takenOn);
+    } else {
+      fill(form, { photo, clip, takenOn });
+    }
     if (song && song.title) {
       form.append("song_title", song.title);
       form.append("song_artist", song.artist || "");

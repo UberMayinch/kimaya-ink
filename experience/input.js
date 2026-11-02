@@ -22,7 +22,7 @@ export function createInput(el, h) {
   let pinchDist = 0;
   let dragging = false;
 
-  const inControl = (t) => !!t.closest?.("button, a, input, textarea, select, form, .j-dock, .j-archive");
+  const inControl = (t) => !!t.closest?.("button, a, input, textarea, select, form, .j-dock, .j-archive, .j-volume");
 
   function onWheel(e) {
     if (inControl(e.target)) return;

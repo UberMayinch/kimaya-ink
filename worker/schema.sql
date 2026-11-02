@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS posts (
   status TEXT NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL,
   taken_on TEXT, -- YYYY-MM-DD, added by migrations/0003_taken_on.sql
-  song TEXT -- json {"title","artist","itunesId"?}, added by migrations/0004_song.sql
+  song TEXT, -- json {"title","artist","itunesId"?}, added by migrations/0004_song.sql
+  text TEXT -- a letter's words (photo is then an empty blob), added by migrations/0005_text.sql
 );
 CREATE INDEX IF NOT EXISTS posts_status_created ON posts (status, created_at);
 CREATE INDEX IF NOT EXISTS posts_ip_created ON posts (ip_hash, created_at);

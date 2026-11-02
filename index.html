@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=35">
+  <link rel="stylesheet" href="style.css?v=36">
   <link rel="stylesheet" href="songs.css?v=2">
   <link rel="stylesheet" href="soundtrack.css?v=1">
   <script type="importmap">
@@ -60,6 +60,14 @@
           <button class="j-mode-rec hud-btn" type="button">&#9679; LEAVE YOURS</button>
         </div>
         <button class="j-exit hud-btn" type="button" aria-label="close">&times;</button>
+        <div class="j-volume">
+          <button class="j-vol hud-btn" type="button" aria-expanded="false" aria-label="song volume">&#128266;</button>
+          <div class="j-vol-panel" hidden>
+            <button class="j-sound hud-btn" type="button" aria-pressed="false" aria-label="sound">&#9834; OFF</button>
+            <label class="j-vol-row"><span>&#9834; SONG</span><input class="j-vol-range" type="range" min="0" max="100" step="5" value="70"></label>
+            <span class="j-vol-val">70%</span>
+          </div>
+        </div>
 
         <div class="j-archive" role="region" aria-label="memory archive">
           <button class="j-a-close hud-btn" type="button">MENU</button>
@@ -80,6 +88,7 @@
           <div class="j-rec-intro">
             <button class="j-open hud-btn big" type="button">&#9654; OPEN THE CAMERA</button>
             <button class="j-upload hud-btn big" type="button" hidden>&#8679; FROM MY PHONE</button>
+            <button class="j-write hud-btn big" type="button">&#9998; A NOTE</button>
             <input class="j-file" type="file" accept="image/*,video/*" multiple hidden>
           </div>
           <div class="j-rec-live">
@@ -188,8 +197,13 @@
           <p class="fine">your photo and note become public once kimaya approves them.</p>
           <div class="booth-pick" id="b-pick">
             <button class="hud-btn big" id="b-start">&#9654; OPEN CAMERA</button>
+            <button class="hud-btn big" id="b-write" type="button">&#9998; A NOTE</button>
           </div>
           <p class="fine">uploads are shrunk and stripped of location data first.</p>
+        </div>
+        <div class="booth-write">
+          <p>&#9993; a note for kimaya</p>
+          <p class="fine">words only. it shows on the camera's screen, page by page, once she says yes.</p>
         </div>
         <div class="booth-sent">
           <p>SAVED</p>
@@ -262,11 +276,11 @@
   <script src="songs.js?v=5"></script>
   <script src="clips.js?v=3"></script>
   <script src="uploads.js?v=2"></script>
-  <script src="guestbook-api.js?v=4"></script>
+  <script src="guestbook-api.js?v=5"></script>
   <script src="drop.js?v=1"></script>
   <script src="script.js?v=8"></script>
-  <script src="booth.js?v=9"></script>
-  <script src="soundtrack.js?v=2"></script>
-  <script type="module" src="journey.js?v=35"></script>
+  <script src="booth.js?v=10"></script>
+  <script src="soundtrack.js?v=3"></script>
+  <script type="module" src="journey.js?v=36"></script>
 </body>
 </html>

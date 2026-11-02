@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=35";
-import { createInput } from "./experience/input.js?v=35";
-import { createPortrait } from "./experience/portrait.js?v=35";
-import { createCameraWorld } from "./experience/camera-world.js?v=35";
-import { createArchive } from "./experience/archive.js?v=35";
-import { createPost } from "./experience/post.js?v=35";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=35";
+import { createController, stateAt, R } from "./experience/controller.js?v=36";
+import { createInput } from "./experience/input.js?v=36";
+import { createPortrait } from "./experience/portrait.js?v=36";
+import { createCameraWorld } from "./experience/camera-world.js?v=36";
+import { createArchive } from "./experience/archive.js?v=36";
+import { createPost } from "./experience/post.js?v=36";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=36";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -223,7 +223,8 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     }
     dirty = true;
     if (archive.isOpen()) {
-      if (action === "lcd" || action === "lens") return;
+      if (action === "lcd") { archive.tapLCD(hit.uv); return; } // the screen itself: thumbnails open
+      if (action === "lens") return;
       archive.onAction(action, hit);
       return;
     }

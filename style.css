@@ -537,6 +537,13 @@ body {
 .booth-pick { display: flex; flex-wrap: wrap; justify-content: center; align-items: start; gap: 10px; }
 .booth-intro .up-status { max-width: 30ch; }
 
+/* a note instead of a picture */
+.booth-write { position: absolute; inset: 0; display: none; place-content: center; justify-items: center; gap: 8px; padding: 20px; text-align: center; color: var(--ink); font-size: 24px; }
+.booth-write p { margin: 0; }
+.booth[data-state="write"] .booth-write { display: grid; }
+.booth[data-state="write"] .booth-form { display: grid; }
+.booth[data-state="write"] #b-msg { min-height: 7.5em; font-size: 18px; line-height: 1.25; }
+
 /* uploaded clip loops over the poster during review */
 .booth-up { position: absolute; inset: 0; display: none; }
 .booth-up video { display: block; transform: none; }
@@ -550,6 +557,10 @@ body {
   .booth { padding: 8px; }
   .booth-lcd { padding: 10px; gap: 10px; }
   .booth[data-state="intro"] .booth-screen { aspect-ratio: auto; min-height: 240px; display: grid; }
+  .booth[data-state="write"] .booth-screen { aspect-ratio: auto; min-height: 120px; display: grid; }
+  .booth[data-state="write"] .booth-write { position: relative; inset: auto; padding: 14px 12px; font-size: 20px; }
+  .j-volume { top: 66px; right: 18px; }
+  .j-vol-range { width: 120px; }
   .booth[data-state="intro"] .booth-intro { position: relative; inset: auto; padding: 18px 12px; font-size: 19px; gap: 8px; }
   .booth-intro .fine, .booth-sent .fine { font-size: 15px; }
   .booth-form .row { flex-wrap: wrap; gap: 8px; }
@@ -891,6 +902,29 @@ body:has(.journey.live):not(.j-released) { overflow: hidden; }
 .journey.focused .j-sound { top: 64px; }
 .journey.focused .j-credit { top: 98px; }
 
+/* the camera's own sound controls while it fills the page: the speaker drops a panel with the level and the toggle */
+.journey.focused .j-hud .j-sound, .journey.focused .j-hud .j-credit { display: none; }
+.j-volume { position: absolute; top: 66px; right: 18px; display: grid; justify-items: end; gap: 6px; }
+.j-focusmode .j-volume .j-vol { position: static; font-size: 22px; line-height: 1; padding: 4px 8px; min-width: 44px; min-height: 36px; background: rgba(10, 12, 12, .55); }
+.j-vol.is-on { border-color: rgba(159, 232, 200, .7); }
+.j-vol-panel {
+  display: grid;
+  gap: 8px;
+  justify-items: stretch;
+  padding: 10px 12px;
+  background: rgba(10, 12, 12, .88);
+  border: 1px solid rgba(159, 232, 200, .4);
+  color: var(--hud);
+  font-size: 17px;
+  letter-spacing: .08em;
+  text-shadow: 0 0 6px rgba(159, 232, 200, .45);
+}
+.j-vol-panel[hidden] { display: none; }
+.j-focusmode .j-vol-panel .hud-btn, .j-vol-panel .j-sound { position: static; top: auto; right: auto; opacity: 1; font-size: 17px; padding: 4px 10px; border: 1px solid rgba(159, 232, 200, .4); text-align: center; }
+.j-vol-row { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.j-vol-range { width: 150px; margin: 0; accent-color: var(--stamp); }
+.j-vol-val { justify-self: end; color: var(--dim); font-size: 15px; text-shadow: none; }
+
 /* ARCHIVE_OPEN / MEMORY_VIEW: the LCD fills the page, the camera's own buttons and these drive it */
 .j-focusmode { display: none; }
 .journey.focused .j-focusmode { display: block; }
@@ -947,7 +981,9 @@ body.j-locked { overflow: hidden; }
 .j-mode-movie[aria-pressed="true"] { background: rgba(255, 74, 61, .25) !important; color: #ff8a80; }
 .journey[data-lcd="sent"] .j-rec-sent { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .journey[data-lcd="review"] .j-form,
+.journey[data-lcd="write"] .j-form,
 .journey[data-lcd="sending"] .j-form { display: grid; }
+.journey[data-lcd="write"] .j-form textarea { font-size: 18px; line-height: 1.25; }
 
 
 .j-shutter {

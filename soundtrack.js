@@ -19,6 +19,7 @@
   "use strict";
 
   const PREF_KEY = "kimaya:sound";
+  const VOL_KEY = "kimaya:volume";
   const META_KEY = "kimaya:soundtrack-song";
 
   const SONG = {
@@ -486,8 +487,9 @@
     wash.start(0, 1.3);
 
     // master: gentle glue, then a fast limiter
-    this.bus = g(1);
-    this.duckG.connect(this.bus);
+    this.songVol = g(1); // the listener's own level for the bed (the speaker panel); cues aren't touched
+    this.duckG.connect(this.songVol);
+    this.songVol.connect(this.bus);
     this.sfx = g(1);
     this.boomBus = g(1);
     this.boomBus.connect(this.bus);
@@ -1015,6 +1017,8 @@
   let songState = "idle"; // idle | loading | playing | failed
   const lastCue = {};
   let want = "song"; // song | synth
+  let volume = 0.7; // the bed's level, 0..1, remembered
+  try { const v = parseFloat(localStorage.getItem(VOL_KEY)); if (v >= 0 && v <= 1) volume = v; } catch (e) { /* ignore */ }
 
   const emit = () => {
     window.dispatchEvent(new CustomEvent("kimaya:sound", { detail: api.state() }));
@@ -1026,6 +1030,7 @@
     if (!AC) return false;
     ctx = new AC({ latencyHint: "playback" });
     eng = new Engine(ctx);
+    eng.songVol.gain.value = volume;
     eng.applyMix(prog, black, ctx.currentTime, true);
     eng.meter = ctx.createAnalyser();
     eng.meter.fftSize = 2048;
@@ -1243,6 +1248,15 @@
     },
     currentSong: () => (chosen ? { ...chosen } : { title: SONG.title, artist: SONG.artist, itunesId: SONG.id }),
 
+    // the bed's level, 0..1 (the song and the pad; the camera's clicks and a clip's own sound stay as they are)
+    setVolume(v) {
+      volume = clamp(+v || 0, 0, 1);
+      try { localStorage.setItem(VOL_KEY, String(volume)); } catch (e) { /* ignore */ }
+      if (eng) eng.songVol.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
+      emit();
+    },
+    volume: () => volume,
+
     // swap in a real (licensed) audio file: decoded, looped, same chain
     async load(url) {
       if (!ensure()) throw new Error("no Web Audio");
@@ -1299,6 +1313,7 @@
           url: (songMeta && songMeta.trackViewUrl) || (chosen ? "" : SONG.trackViewUrl),
         },
         progress: prog,
+        volume,
       };
     },
 
@@ -1353,6 +1368,33 @@
       let o = 44;
       for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++, o += 4) v.setFloat32(o, data[c][i], true);
       return new Blob([b], { type: "audio/wav" });
+    },
+
+    // the speaker: a button that drops a panel with the bed's level (and a toggle inside, class j-sound)
+    bindVolume(wrap) {
+      const btn = wrap.querySelector(".j-vol"), panel = wrap.querySelector(".j-vol-panel");
+      const range = wrap.querySelector(".j-vol-range"), val = wrap.querySelector(".j-vol-val");
+      if (!btn || !panel || !range || btn._kimaya) return;
+      btn._kimaya = true;
+      ["click", "pointerdown", "pointerup", "wheel", "dblclick"].forEach((n) => wrap.addEventListener(n, (e) => e.stopPropagation()));
+      btn.addEventListener("click", () => {
+        const open = panel.hidden;
+        panel.hidden = !open;
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        if (open) range.focus({ preventScroll: true });
+      });
+      range.addEventListener("input", () => api.setVolume(range.value / 100));
+      const paint = () => {
+        const v = api.volume();
+        const pct = Math.round(v * 100);
+        if (document.activeElement !== range) range.value = pct;
+        if (val) val.textContent = `${pct}%`;
+        btn.textContent = pct === 0 ? "🔇" : pct < 50 ? "🔉" : "🔊";
+        btn.classList.toggle("is-on", api.state().on);
+      };
+      window.addEventListener("kimaya:sound", paint);
+      paint();
+      return wrap;
     },
 
     // wire a toggle button (and optional credit link). index.html does this automatically for .j-sound
@@ -1435,6 +1477,7 @@
       const scope = btn.closest(".j-hud, .j-audio") || btn.parentElement;
       api.bindToggle(btn, scope && scope.querySelector(".j-credit"));
     });
+    document.querySelectorAll(".j-volume").forEach((w) => api.bindVolume(w));
     emit();
   }
 

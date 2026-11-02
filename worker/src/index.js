@@ -4,6 +4,8 @@
 //                                    optional taken_on (YYYY-MM-DD), optional clip (webm/mp4)
 //                                    several at once: photo.0, clip.0, taken_on.0, message.0 … up to 12
 //                                    (name and message are shared; a message.N replaces it for that one)
+//                                    a letter: name, text (up to 1200 chars, newlines kept), no photo;
+//                                    message is then its optional title
 // GET    /api/posts                  approved posts, by taken_on (fallback created_at), newest first, with has_clip
 // GET    /api/photo/:id              jpeg, approved only
 // GET    /api/clip/:id               webm/mp4, approved only, supports Range
@@ -26,6 +28,7 @@ const MAX_ITEMS = 12; // photos or clips in one post form
 const MAX_BODY = MAX_ITEMS * (MAX_PHOTO + MAX_CLIP) + 16 * 1024;
 const MAX_NAME = 24;
 const MAX_MESSAGE = 140;
+const MAX_TEXT = 1200; // a letter
 const MAX_SONG_TITLE = 80;
 const MAX_SONG_ARTIST = 60;
 const MAX_JSON = 8 * 1024;
@@ -91,7 +94,7 @@ async function route(req, env) {
 // sorted as a series: when it was taken, else when it was posted
 async function listApproved(env) {
   const { results } = await env.DB.prepare(
-    `SELECT id, name, message, taken_on, created_at, song, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'approved'
+    `SELECT id, name, message, text, taken_on, created_at, song, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'approved'
      ORDER BY COALESCE(taken_on, strftime('%Y-%m-%d', created_at / 1000, 'unixepoch')) DESC, created_at DESC
      LIMIT ${WALL_LIMIT}`
   ).all();
@@ -105,7 +108,9 @@ async function photo(env, id, admin) {
     .bind(id)
     .first();
   if (!row) return json({ error: "not found" }, 404);
-  return new Response(toBytes(row.photo), {
+  const bytes = toBytes(row.photo);
+  if (!bytes.length) return json({ error: "not found" }, 404); // a letter has no picture
+  return new Response(bytes, {
     headers: {
       "Content-Type": "image/jpeg",
       "Cache-Control": admin ? "no-store" : "public, max-age=86400",
@@ -188,6 +193,16 @@ async function readFields(form, textRequired) {
   const message = clean(form.get("message"), MAX_MESSAGE);
   const song = readSong(form.get("song_title"), form.get("song_artist"), form.get("song_itunes"));
 
+  // a letter: words instead of a picture (the photo column keeps an empty blob)
+  const text = cleanText(form.get("text"), MAX_TEXT);
+  if (text && !form.has("photo") && !form.has("photo.0")) {
+    if (textRequired && !name) return { error: json({ error: "name required" }, 400) };
+    const raw = form.get("taken_on");
+    const takenOn = raw === null || raw === "" ? null : validDay(raw);
+    if (takenOn === false) return { error: json({ error: "taken_on must be a real YYYY-MM-DD date" }, 400) };
+    return { items: [{ name, message, text, photo: new Uint8Array(0), takenOn, song }] };
+  }
+
   const suffixes = [];
   if (form.has("photo")) suffixes.push("");
   else for (let i = 0; i < MAX_ITEMS && form.has(`photo.${i}`); i++) suffixes.push(`.${i}`);
@@ -268,6 +283,7 @@ async function insertPosts(env, items, ipHash, status) {
       name: f.name,
       message: f.message,
       photo: f.photo,
+      ...(f.text ? { text: f.text } : {}), // migrations/0005_text.sql
       ip_hash: ipHash,
       status,
       created_at: now - i,
@@ -298,7 +314,7 @@ async function createAdminPost(req, env) {
 
 async function listPending(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, name, message, taken_on, created_at, song, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
+    "SELECT id, name, message, text, taken_on, created_at, song, clip IS NOT NULL AS has_clip FROM posts WHERE status = 'pending' ORDER BY created_at ASC LIMIT 100"
   ).all();
   return json({ posts: results.map(withExtras) }, 200, { "Cache-Control": "no-store" });
 }
@@ -317,6 +333,7 @@ async function updatePost(req, env, id) {
   const set = {};
   if ("name" in body) set.name = clean(body.name, MAX_NAME);
   if ("message" in body) set.message = clean(body.message, MAX_MESSAGE);
+  if ("text" in body) set.text = cleanText(body.text, MAX_TEXT) || null;
   if ("taken_on" in body) {
     const v = body.taken_on === null || body.taken_on === "" ? null : validDay(body.taken_on);
     if (v === false) return json({ error: "taken_on must be a real YYYY-MM-DD date" }, 400);
@@ -374,6 +391,19 @@ function clean(v, max) {
   return v.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+// a letter keeps its line breaks (at most one blank line in a row)
+function cleanText(v, max) {
+  if (typeof v !== "string") return "";
+  return v
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, max);
+}
+
 // "bytes=a-b", "bytes=a-", "bytes=-n" -> { start, end } inclusive, or null if unsatisfiable
 function parseRange(header, total) {
   const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
@@ -391,7 +421,7 @@ function parseRange(header, total) {
 }
 
 function withExtras(p) {
-  return { ...p, has_clip: !!p.has_clip, song: parseSong(p.song) };
+  return { ...p, has_clip: !!p.has_clip, song: parseSong(p.song), text: typeof p.text === "string" ? p.text : "" };
 }
 
 function toBytes(v) {

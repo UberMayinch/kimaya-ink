@@ -9,8 +9,8 @@
 //     -> { lcd, items, open(), close(), isOpen(), t, view, sel, select(i), step(dir), onAction(action, hit),
 //          drawLCD(), live(), rec, tick(now), srText }
 
-import { loadArchive, letterParagraphs } from "./archive-data.js?v=35";
-import { stampOf, wait } from "./util.js?v=35";
+import { loadArchive, letterParagraphs } from "./archive-data.js?v=36";
+import { stampOf, wait } from "./util.js?v=36";
 
 const W = 640, H = 480;
 const LEFT = 104; // the top-left of the screen sits under her sticker
@@ -190,6 +190,8 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     pageSong();
     journey.classList.remove("focused");
     document.body.classList.remove("j-locked");
+    const vol = $(".j-vol-panel");
+    if (vol) { vol.hidden = true; $(".j-vol")?.setAttribute("aria-expanded", "false"); }
     if (document.activeElement?.closest?.(".j-focusmode")) setTimeout(() => journey.querySelector(".j-see")?.focus({ preventScroll: true }), 200);
     if (!fromHistory && history.state && history.state.kimayaArchive) {
       fromHistory = true;
@@ -266,6 +268,26 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     pageSong();
     announce();
     mark();
+  }
+
+  // a touch on the screen itself: in the index a thumbnail opens, on a picture it answers like OK
+  function tapLCD(uv) {
+    if (!uv || rec.mode !== "play" || !A.items.length) return false;
+    const x = uv.x * W, y = (1 - uv.y) * H;
+    if (A.view === "index") {
+      const page = Math.floor(A.sel / 9);
+      for (let k = 0; k < 9; k++) {
+        const cx = 56 + (k % 3) * 184, cy = 54 + Math.floor(k / 3) * 128;
+        if (x >= cx - 6 && x < cx + 178 && y >= cy - 6 && y < cy + 122) {
+          const i = page * 9 + k;
+          if (i < A.items.length) { select(i); openItem(); }
+          return true;
+        }
+      }
+      return true;
+    }
+    onAction("ok");
+    return true;
   }
 
   function pageCount(item) {
@@ -646,13 +668,16 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     backToMemories: $(".j-back-memories"),
     upload: $(".j-upload"),
     file: $(".j-file"),
+    write: $(".j-write"),
+    retake: $(".j-retake"),
     send: $(".j-send"),
     // the song box: searches apple as you type, so the exact track gets saved
     song: $(".j-songrow") && window.KimayaSongs ? window.KimayaSongs.picker($(".j-songrow")) : null,
   };
 
   const REC_COPY = {
-    intro: "leave her a memory: a photo, an eight second video with sound, or one from your phone. it goes public once kimaya says yes.",
+    intro: "leave her a memory: a photo, an eight second video with sound, one from your phone, or a note. it goes public once kimaya says yes.",
+    write: "write her a note. it shows on the screen as you type. add your name, then post it.",
     live: "camera on. press the big button, or space, to take it.",
     count: "counting down",
     rec: "recording eight seconds with sound",
@@ -667,6 +692,15 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
   function setMode(mode) {
     rec.mode = mode;
     journey.dataset.lcd = mode;
+    // the same form writes a note (longer, shown on the screen as a letter) or captions a picture
+    const writing = mode === "write";
+    if (ui.msg) {
+      ui.msg.maxLength = writing ? 1200 : 140;
+      ui.msg.rows = writing ? 6 : 2;
+      ui.msg.placeholder = writing ? "a note for kimaya" : "a note for kimaya";
+      if (ui.left) ui.left.textContent = ui.msg.maxLength - ui.msg.value.length;
+    }
+    if (ui.retake) ui.retake.textContent = writing ? "◀ BACK" : "↺ RETAKE";
     pageSong();
     if (ui.err) ui.err.textContent = "";
     if (mode === "play") announce();
@@ -824,12 +858,14 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     e.preventDefault();
     const name = ui.name.value.trim();
     const message = ui.msg.value.trim();
-    if (!rec.photo || !name || !message) return;
+    const writing = rec.mode === "write";
+    if ((!writing && !rec.photo) || !name || !message) return;
     const song = ui.song ? ui.song.value() : null;
     ui.send.disabled = true;
     setMode("sending");
     try {
-      await window.KimayaGuestbook.post({ name, message, photo: rec.photo, clip: rec.clip, takenOn: rec.takenOn, song });
+      if (writing) await window.KimayaGuestbook.post({ name, text: message, song });
+      else await window.KimayaGuestbook.post({ name, message, photo: rec.photo, clip: rec.clip, takenOn: rec.takenOn, song });
       ui.name.value = "";
       ui.msg.value = "";
       ui.song?.reset();
@@ -854,13 +890,25 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
       else if (rec.still) cover(g, rec.still, rec.still.width, rec.still.height, W, H);
     }
 
+    if (m === "write") {
+      // the note, laid out as the letter it will be, last page first, as it's typed
+      const draft = { id: "draft", type: "letter", text: ui.msg?.value || "", title: "", by: ui.name?.value.trim() || "", date: "", cover: "" };
+      for (const k of [...layouts.keys()]) if (k.startsWith("draft:")) layouts.delete(k);
+      const keep = A.page;
+      A.page = 1e6;
+      drawLetter(draft, blinkOn);
+      A.page = keep;
+      if (!draft.text) text("write her a note…", LEFT, 112, { font: "serif", size: 26, color: DIM, base: "alphabetic" });
+      return;
+    }
+
     if (m === "intro" || m === "sent") {
       g.fillStyle = "#050607";
       g.fillRect(0, 0, W, H);
       if (m === "intro") {
         text("● leave her a memory", W / 2, H / 2 - 84, { align: "center", color: RED, size: 40 });
-        text("a photo, or an 8 second video with sound,", W / 2, H / 2 - 24, { align: "center", color: INK, size: 28 });
-        text("or something already on your phone.", W / 2, H / 2 + 10, { align: "center", color: INK, size: 28 });
+        text("a photo, an 8 second video with sound,", W / 2, H / 2 - 24, { align: "center", color: INK, size: 28 });
+        text("one from your phone, or a note.", W / 2, H / 2 + 10, { align: "center", color: INK, size: 28 });
         text("it goes public once kimaya says yes.", W / 2, H / 2 + 58, { align: "center", color: DIM, size: 24 });
       } else {
         text("SAVED", W / 2, H / 2 - 20, { align: "center", size: 56 });
@@ -907,10 +955,13 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
   on(".j-mode-rec", "click", () => { if (rec.mode === "play") { stopAudio(); setMode("intro"); } });
   on(".j-open", "click", openCamera);
   on(".j-shutter", "click", shutter);
-  on(".j-retake", "click", openCamera);
+  on(".j-retake", "click", () => (rec.mode === "write" ? setMode("intro") : openCamera()));
+  on(".j-write", "click", () => { clearShot(); stopCamera(); setMode("write"); ui.msg?.focus(); });
+  ui.msg?.addEventListener("input", () => { if (rec.mode === "write") mark(); }); // the screen follows the typing
+  ui.name?.addEventListener("input", () => { if (rec.mode === "write") mark(); });
   on(".j-again", "click", () => setMode("intro"));
   $(".j-form")?.addEventListener("submit", send);
-  ui.msg?.addEventListener("input", () => { ui.left.textContent = 140 - ui.msg.value.length; });
+  ui.msg?.addEventListener("input", () => { ui.left.textContent = ui.msg.maxLength - ui.msg.value.length; });
   function setMovie(on) {
     rec.movie = on && !!window.KimayaClips?.supported();
     ui.photoMode?.setAttribute("aria-pressed", rec.movie ? "false" : "true");
@@ -974,7 +1025,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     lcd, A, rec,
     get items() { return A.items; },
     open, close, isOpen: () => A.open,
-    select, step, openItem, toIndex, turnPage, onAction, onKey,
+    select, step, openItem, toIndex, turnPage, onAction, onKey, tapLCD,
     drawLCD, live, leaveRec, announce,
     // the LCD slideshows by itself while nobody holds the camera
     autoFlip(now) {

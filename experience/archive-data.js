@@ -49,15 +49,15 @@ function fromPhotosJson(list) {
 function fromGuestbook(posts, gb) {
   return posts.map((p) => ({
     id: `guest-${p.id}`,
-    type: p.has_clip ? "clip" : "photo",
+    type: p.text ? "letter" : p.has_clip ? "clip" : "photo",
     // own cache key: a non-cors <img> of the same url elsewhere would taint the LCD canvas
-    src: `${gb.photoURL(p.id)}?lcd`,
+    src: p.text ? "" : `${gb.photoURL(p.id)}?lcd`,
     clip: p.has_clip ? `${gb.clipURL(p.id)}?lcd` : "",
     audio: "",
-    text: "",
-    title: "",
+    text: p.text || "",
+    title: p.text ? p.message || "" : "", // a letter's note is its title
     date: p.taken_on || isoDate(p.created_at),
-    caption: p.message || "",
+    caption: p.text ? "" : p.message || "",
     by: p.name || "",
     song: p.song && p.song.title ? p.song : null,
     cover: "",

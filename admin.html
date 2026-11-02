@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex">
   <title>kimaya · approvals</title>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=35">
+  <link rel="stylesheet" href="style.css?v=36">
   <link rel="stylesheet" href="songs.css?v=2">
   <style>
     .admin { max-width: 900px; margin: 0 auto; }
@@ -15,6 +15,8 @@
     .queue { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 20px; }
     .card { background: #f4f1ea; color: #2a2724; padding: 10px; }
     .card img, .card video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+    .card .note { aspect-ratio: 4 / 3; background: #1a1917; display: grid; place-items: center; padding: 12px; overflow: hidden; }
+    .card .note .note-text { margin: 0; max-height: 100%; overflow: hidden; color: #e6e0d2; font: italic 16px/1.3 var(--serif); white-space: pre-line; }
     .card p { margin: 8px 0; font: italic 19px var(--serif); overflow-wrap: anywhere; }
     .card small { font: 15px var(--mono); color: #6d6862; }
     .card .row { display: flex; justify-content: space-between; margin-top: 8px; }
@@ -76,6 +78,6 @@
   <script src="songs.js?v=5"></script>
   <script src="clips.js?v=3"></script>
   <script src="uploads.js?v=2"></script>
-  <script src="admin.js?v=6"></script>
+  <script src="admin.js?v=7"></script>
 </body>
 </html>

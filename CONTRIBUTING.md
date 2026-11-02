@@ -138,10 +138,12 @@ cd worker
 npx wrangler d1 execute kimaya-guestbook --local --file migrations/0002_clips.sql
 npx wrangler d1 execute kimaya-guestbook --local --file migrations/0003_taken_on.sql
 npx wrangler d1 execute kimaya-guestbook --local --file migrations/0004_song.sql
+npx wrangler d1 execute kimaya-guestbook --local --file migrations/0005_text.sql
 # live
 npx wrangler d1 execute kimaya-guestbook --remote --file migrations/0002_clips.sql
 npx wrangler d1 execute kimaya-guestbook --remote --file migrations/0003_taken_on.sql
 npx wrangler d1 execute kimaya-guestbook --remote --file migrations/0004_song.sql
+npx wrangler d1 execute kimaya-guestbook --remote --file migrations/0005_text.sql
 npx wrangler deploy
 ```
 
@@ -157,6 +159,10 @@ Besides the camera, the booth has **⇪ UPLOAD** for an existing photo or short 
 ### several at once (the drop)
 
 Visitors can share up to 12 photos and videos in one go from **⇪ SHARE PHOTOS & VIDEOS** on the black below the hero, from **⇪ SHARE PHOTOS** in the fallback guestbook, or by picking more than one file behind the camera's **⇪ FROM MY PHONE**. That's `drop.js`: one name and one note for all of them (each can carry its own caption instead), prepared by `uploads.js` one after another (a video plays through once to make its clip), then sent together with `KimayaGuestbook.postMany` as one `POST /api/posts` with indexed fields (`photo.0`, `clip.0`, `taken_on.0`, `message.0`, …), one Turnstile check, all inserted or none. They queue for approval like any post. The per-ip limit counts posts, 30 an hour, so a drop of 12 and a couple of selfies fit. Against a worker from before drops the client falls back to posting them one at a time.
+
+### notes (letters) from visitors
+
+A note is one more kind of memory, next to a photo and a video: **✎ A NOTE** on the camera's "leave yours" screen (the LCD lays the words out as the letter they'll be, while they're typed) and in the fallback booth. It posts as `name` + `text` (up to 1200 characters, line breaks kept, `message` is an optional title) with no photo; the worker keeps an empty blob in the photo column (`migrations/0005_text.sql` adds `text`). On the LCD it's the same `letter` type as one in `photos.json`: a card in the index, pages in view. On the fallback wall it prints as paper with the words on it, and the admin card shows and edits the words.
 
 ### songs on posts
 

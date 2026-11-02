@@ -479,6 +479,9 @@ function init(THREE, RoundedBoxGeometry, map, depthImg) {
   };
 
   let target = 0, prog = 0, frameNo = 0, flashT = 0, dirty = true;
+  const sound = { black: null, locked: null }; // sound: edge state for cues
+  // sound: mix beat points, keep in step with keys[] in buildPath()
+  window.KimayaSound?.configure({ beats: { face: 0.34, eye: 0.5, pupil: 0.845, front: 0.855, lens: 0.93, back: 0.96 } });
 
   // dev: ?p=0.5 freezes the journey at that point
   const pinned = new URLSearchParams(location.search).get("p");
@@ -517,7 +520,16 @@ function init(THREE, RoundedBoxGeometry, map, depthImg) {
     // viewfinder hud
     if (hud.zoom) hud.zoom.style.width = `${Math.round(Math.min(p / 0.845, 1) * 100)}%`;
     if (hud.hint) hud.hint.hidden = p > 0.02;
-    if (hud.focus) hud.focus.classList.toggle("locked", (p > 0.3 && p < 0.8) || p > 0.95);
+    const locked = (p > 0.3 && p < 0.8) || p > 0.95;
+    if (hud.focus) hud.focus.classList.toggle("locked", locked);
+
+    // sound: mix follows progress + real screen blackness; shutter on each black cut, beep on focus lock
+    const blackNow = post.uniforms.uBlack.value;
+    window.KimayaSound?.setProgress(calm ? 1 : p, { black: calm ? 0 : blackNow });
+    if (blackNow > 0.97 && sound.black === false) window.KimayaSound?.cue("shutter");
+    if (locked && sound.locked === false) window.KimayaSound?.cue("beep");
+    sound.black = blackNow > 0.97;
+    sound.locked = locked;
   }
 
   // render resolution drops on slow gpus; the painted look survives upscaling

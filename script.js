@@ -12,6 +12,19 @@ function stamp(dateStr) {
 
 const dscName = (i) => `DSC_${String(i + 1).padStart(4, "0")}.JPG`;
 
+// a print with a song can't be one big button (the chip is a button too),
+// so the paper becomes a div and the photo part opens the viewer
+function withSong(btn, song) {
+  if (!song || !window.KimayaSongs) return btn;
+  const print = document.createElement("div");
+  print.className = "shot has-song";
+  print.style.cssText = btn.style.cssText;
+  btn.className = "shot-open";
+  btn.removeAttribute("style");
+  print.append(btn, KimayaSongs.chip(song));
+  return print;
+}
+
 function flash() {
   const el = document.querySelector(".flash");
   el.classList.remove("on");
@@ -63,7 +76,7 @@ function render() {
 
     btn.append(frame, label);
     btn.addEventListener("click", () => open(i));
-    roll.append(btn);
+    roll.append(withSong(btn, p.song));
   });
 }
 
@@ -84,6 +97,7 @@ function show(i) {
     by.textContent = `shot by ${p.by}`;
     cap.append(by);
   }
+  if (p.song && window.KimayaSongs) cap.append(KimayaSongs.chip(p.song));
 }
 
 function showClip(p) {

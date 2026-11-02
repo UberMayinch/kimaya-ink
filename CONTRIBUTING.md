@@ -42,3 +42,7 @@ photos.json     list of photos
 photos/         the images
 CNAME           custom domain
 ```
+
+## changing css/js
+
+GitHub Pages caches files for ~10 minutes. When you change `style.css`, `script.js` or `camera.js`, bump the `?v=` number on its tag in `index.html` so visitors don't get new HTML with old styles.

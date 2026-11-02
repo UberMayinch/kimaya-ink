@@ -7,7 +7,7 @@
 //
 // world units: the plane is PW x PH (photo 1600x860 -> 18.6 x 10). +x right, +y up, +z towards us.
 
-import { clamp, lerp, smooth, smoother, GLSL_NOISE } from "./util.js?v=27";
+import { clamp, lerp, smooth, smoother, GLSL_NOISE } from "./util.js?v=28";
 
 export const PHOTO_W = 1600, PHOTO_H = 860;
 export const EYE_PX = { x: 548, y: 352, r: 28 };      // the portal eye (her right eye, nearer to us)

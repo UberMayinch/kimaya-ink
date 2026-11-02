@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=27";
-import { createInput } from "./experience/input.js?v=27";
-import { createPortrait } from "./experience/portrait.js?v=27";
-import { createCameraWorld } from "./experience/camera-world.js?v=27";
-import { createArchive } from "./experience/archive.js?v=27";
-import { createPost } from "./experience/post.js?v=27";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=27";
+import { createController, stateAt, R } from "./experience/controller.js?v=28";
+import { createInput } from "./experience/input.js?v=28";
+import { createPortrait } from "./experience/portrait.js?v=28";
+import { createCameraWorld } from "./experience/camera-world.js?v=28";
+import { createArchive } from "./experience/archive.js?v=28";
+import { createPost } from "./experience/post.js?v=28";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=28";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -231,7 +231,29 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     archive.onAction(action, hit);
   }
 
+  // below the hero: once a lap has landed back on the photograph (or the ↓ was pressed) the page
+  // takes wheel-down at the start, and the wish below scrolls up over the journey. a tap on her
+  // eye, the keys or NEXT still go in; the next landing releases again.
+  let released = false;
+  const atStart = () => ctrl.p < 0.005 && !ctrl.flying && !archive.isOpen();
+  function release() {
+    if (released) return;
+    released = true;
+    journey.classList.add("released");
+    document.body.classList.add("j-released");
+  }
+  journey.querySelector(".j-down")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    release();
+    scrollTo({ top: innerHeight, behavior: calm ? "auto" : "smooth" });
+  });
+
   const input = createInput(pin, {
+    passWheel(dy) {
+      if (archive.isOpen()) return false;
+      if (scrollY > 0) return true; // the page is already below the hero
+      return released && dy > 0 && atStart();
+    },
     onNudge(dp, src) {
       if (archive.isOpen() || pinned !== null) return;
       ctrl.nudge(dp * (src === "pinch" ? 1.2 : 1) * (calm ? 0.6 : 1));
@@ -347,6 +369,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
       hud.brackets.style.top = onEye ? `${((1 - eyeS.y) * 100).toFixed(2)}%` : "";
     }
     journey.classList.toggle("in-camera", inCameraWorld() && !archive.isOpen());
+    journey.classList.toggle("at-start", p < 0.02 && !archive.isOpen());
     journey.dataset.state = stateAt(p, { archiveOpen: archive.isOpen(), memory: archive.isOpen() && (archive.A.view === "item" || archive.rec.mode !== "play"), interacting: input.dragging() });
     return locked;
   }
@@ -514,7 +537,7 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
     }
 
     const { moving, dp } = ctrl.tick(dt, now);
-    if (ctrl.C.wrapped) { orbitP.yaw = orbitP.pitch = orbitC.yaw = orbitC.pitch = 0; parallax.x = parallax.y = 0; }
+    if (ctrl.C.wrapped) { orbitP.yaw = orbitP.pitch = orbitC.yaw = orbitC.pitch = 0; parallax.x = parallax.y = 0; release(); }
     const blending = archive.tick(dt);
     lastP = ctrl.p;
 

@@ -606,8 +606,12 @@ body {
 /* ---------- the journey (journey.js) ---------- */
 
 body:has(.journey) { padding-top: 0; }
-/* while it runs, the journey is the page: the old site below is the fallback only */
-body:has(.journey.live) { padding: 0; overflow: hidden; }
+/* while it runs, the journey is the page: the old site below is the fallback only.
+   released (a lap landed, or ↓): the page scrolls and the wish below slides over it */
+body:has(.journey.live) { padding: 0; }
+body:has(.journey.live):not(.j-released) { overflow: hidden; }
+.journey.live ~ .j-below { position: relative; z-index: 11; margin: 100svh 0 0; min-height: 100svh; }
+.journey.live.released.at-start .journey-pin { touch-action: pan-y; }
 .journey.live ~ main,
 .journey.live ~ .viewer,
 .journey.live ~ .booth { display: none; }
@@ -664,6 +668,53 @@ body:has(.journey.live) { padding: 0; overflow: hidden; }
   transition: opacity .2s linear;
 }
 
+/* the way down, shown on the photograph */
+.j-down {
+  all: unset;
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: none;
+  padding: 4px 12px;
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--ink);
+  font: 30px/1 var(--mono);
+  opacity: .75;
+  text-shadow: 0 0 6px rgba(0, 0, 0, .6);
+  animation: j-bob 2.2s ease-in-out infinite;
+}
+.j-down:hover, .j-down:focus-visible { opacity: 1; }
+.j-down:focus-visible { outline: 1px solid var(--hud); }
+.journey.live.at-start .j-down { display: block; }
+.journey.focused .j-down { display: none; }
+@keyframes j-bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 6px); } }
+
+/* below the hero: the wish, in the title's hand, a little smaller */
+.j-below {
+  display: grid;
+  place-items: center;
+  min-height: 70svh;
+  padding: clamp(48px, 10vh, 120px) clamp(16px, 5vw, 48px);
+  margin: 0 calc(-1 * clamp(10px, 3vw, 32px));
+  background: #0b0b0c;
+  border-top: 1px solid rgba(255, 246, 234, .08);
+  text-align: center;
+}
+.j-wish {
+  margin: 0;
+  max-width: 22ch;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(24px, 3.6vw, 48px);
+  line-height: 1.15;
+  letter-spacing: -.02em;
+  color: #fff6ea;
+  text-shadow: 0 0 30px rgba(255, 220, 180, .35), 0 0 6px rgba(0, 0, 0, .6);
+  text-wrap: balance;
+}
+
 .j-focus { left: 50%; top: 50%; width: 90px; height: 64px; transform: translate(-50%, -50%); }
 .j-focus i { position: absolute; width: 14px; height: 14px; border: 2px solid var(--ink); opacity: .8; }
 .j-focus i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; }
@@ -687,7 +738,7 @@ body:has(.journey.live) { padding: 0; overflow: hidden; }
 .journey.calm.in-camera .j-cta { bottom: 120px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .j-rec, .j-focus.on-eye { animation: none; }
+  .j-rec, .j-focus.on-eye, .j-down { animation: none; }
   .j-title { transition: none; }
 }
 

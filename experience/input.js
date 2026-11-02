@@ -8,6 +8,7 @@
 //             onDblClick(e)
 //             onKey(e) -> bool      return true when handled (prevents default)
 //             onPointer(x, y)       -1..1 across the element, every move
+//             passWheel(dy) -> bool true when the page, not the journey, should scroll on this wheel
 
 const WHEEL_GAIN = 0.00022; // one mouse notch (100px) ≈ 0.022
 const MAX_STEP = 0.03;
@@ -25,8 +26,9 @@ export function createInput(el, h) {
 
   function onWheel(e) {
     if (inControl(e.target)) return;
-    e.preventDefault();
     let dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
+    if (h.passWheel?.(dy)) return;
+    e.preventDefault();
     dy = Math.max(-150, Math.min(150, dy));
     const dp = Math.max(-MAX_STEP, Math.min(MAX_STEP, dy * WHEEL_GAIN));
     if (dp) h.onNudge?.(dp, Math.abs(e.deltaY) < 40 && !Number.isInteger(e.deltaY) ? "trackpad" : "wheel");

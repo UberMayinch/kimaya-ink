@@ -1,0 +1,58 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: photos.json is valid
+        run: |
+          jq -e 'type == "array"' photos.json > /dev/null
+          jq -e 'all(.[]; has("file") and has("date"))' photos.json > /dev/null \
+            || { echo "::error::every entry needs \"file\" and \"date\""; exit 1; }
+          jq -e 'all(.[]; .date | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))' photos.json > /dev/null \
+            || { echo "::error::dates must be YYYY-MM-DD"; exit 1; }
+
+      - name: every listed photo exists
+        run: |
+          jq -r '.[].file' photos.json | while read -r f; do
+            [ -f "$f" ] || { echo "::error::missing file: $f"; exit 1; }
+          done
+
+      - name: photos are web-sized
+        run: |
+          find photos -type f -size +2M | while read -r f; do
+            echo "::warning file=$f::over 2MB, please shrink it"
+          done
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

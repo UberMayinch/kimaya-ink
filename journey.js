@@ -397,8 +397,9 @@ function init(THREE, RoundedBoxGeometry, photoImg, depthImg, handImg) {
   rig.add(handCard);
 
   // the camera sits where her phone was, in her grip
-  const GRIP = V3(3.7, -1.9, 0.62);
-  handCard.position.set(5.35 - GRIP.x, -2.275 - GRIP.y, FRONT * SCALE + 0.06);
+  const GRIP = V3(3.95, -1.9, 0.62);
+  // card sits a touch left of where the fingers were, so the palm wraps the body's edge
+  handCard.position.set(5.35 - 0.25 - GRIP.x, -2.275 - GRIP.y, FRONT * SCALE + 0.06);
   handCard.renderOrder = 2;
   const HELD = { pos: GRIP, rot: new THREE.Euler(0.04, -0.06, 0.02) };
   const ASIDE = { pos: V3(10.5, -8.2, 2.4), rot: new THREE.Euler(0.8, -1.1, -0.6) };

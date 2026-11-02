@@ -266,10 +266,15 @@
     if (audio && !audio.paused) audio.pause();
   }
 
-  // accompany(song, true): play it quietly under something else that makes sound (a clip);
-  // accompany(null, false): that something stopped, so the song stops too
+  // accompany(song, true, level?): play it quietly under something else that makes sound (a clip);
+  // level: an optional function giving the song's volume, 0..1, read again whenever the page's sound changes
+  // (the camera's speaker bar). without it, UNDER. accompany(null, false): that something stopped, so the song stops too
   let underSeq = 0;
-  function accompany(song, on) {
+  let underLevel = null;
+  const underVol = () => { const v = underLevel ? +underLevel() : UNDER; return v >= 0 && v <= 1 ? v : UNDER; };
+  window.addEventListener("kimaya:sound", () => { if (under && audio) audio.volume = underVol(); });
+  function accompany(song, on, level) {
+    underLevel = typeof level === "function" ? level : null;
     underSeq++; // a stop while the lookup is still out cancels that start
     const bed = window.KimayaSound;
     const bedOn = !!(bed && bed.isOn && bed.isOn() && bed.setSong);
@@ -294,7 +299,7 @@
       const a = player();
       under = true;
       a.loop = true;
-      a.volume = UNDER;
+      a.volume = underVol();
       return p;
     });
   }

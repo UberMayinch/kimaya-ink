@@ -487,6 +487,7 @@
     wash.start(0, 1.3);
 
     // master: gentle glue, then a fast limiter
+    this.bus = g(1);
     this.songVol = g(1); // the listener's own level for the bed (the speaker panel); cues aren't touched
     this.duckG.connect(this.songVol);
     this.songVol.connect(this.bus);

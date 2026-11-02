@@ -9,8 +9,8 @@
 //     -> { lcd, items, open(), close(), isOpen(), t, view, sel, select(i), step(dir), onAction(action, hit),
 //          drawLCD(), live(), rec, tick(now), srText }
 
-import { loadArchive, letterParagraphs } from "./archive-data.js?v=37";
-import { stampOf, wait } from "./util.js?v=37";
+import { loadArchive, letterParagraphs } from "./archive-data.js?v=38";
+import { stampOf, wait } from "./util.js?v=38";
 
 const W = 640, H = 480;
 const LEFT = 104; // the top-left of the screen sits under her sticker
@@ -127,8 +127,21 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
     window.addEventListener("kimaya:audio-claim", (e) => { if (e.detail !== "voice" && !el.paused) el.pause(); });
     return el;
   }
-  // a clip's own sound is on: the bed doesn't step back by itself here, the speaker's bar is the level
-  function duck(on) { window.KimayaSound?.duck(on, 1); }
+  // a clip's own sound (or a voice note) is on: the memory's song plays underneath at the speaker's level.
+  // with the page's soundtrack on, that bed is the song already (pageSong) and doesn't step back by itself;
+  // with it off, the song player carries the song instead, at the same level
+  function duck(on) {
+    const bed = window.KimayaSound, songs = window.KimayaSongs;
+    const s = current()?.song;
+    if (songs?.accompany) {
+      if (on && s && !bed?.isOn?.()) songs.accompany(s, true, level);
+      else songs.accompany(null, false);
+    }
+    bed?.duck(on, 1);
+  }
+  const sounding = () => !playVideo.muted || audio.playing;
+  // the song player's own start/stop moves the bed's duck too (soundtrack.js); while a clip sounds, the bar is the level
+  window.addEventListener("kimaya:song", () => { if (sounding()) window.KimayaSound?.duck(true, 1); });
   function analyserFor(el) {
     if (audio.analyser) return audio.analyser;
     try {
@@ -402,7 +415,13 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
   function setLevel(v) {
     window.KimayaSound?.setVolume?.(Math.min(1, Math.max(0, v)));
   }
-  window.addEventListener("kimaya:sound", () => mark());
+  let bedWasOn = !!window.KimayaSound?.isOn?.();
+  window.addEventListener("kimaya:sound", () => {
+    // the soundtrack switched on or off while a clip is sounding: hand the song over
+    const bedOn = !!window.KimayaSound?.isOn?.();
+    if (bedOn !== bedWasOn) { bedWasOn = bedOn; if (sounding()) duck(true); }
+    mark();
+  });
 
   function drawSpeaker(x, y, lvl, on) {
     g.save();
@@ -423,7 +442,7 @@ export function createArchive(THREE, { journey, calm, demo, visible = () => true
   function drawSound(it, blinkOn) {
     if (!hasAudio(it)) return;
     const lvl = level();
-    const on = !!window.KimayaSound?.isOn?.() && lvl > 0;
+    const on = lvl > 0 && (!!window.KimayaSound?.isOn?.() || (!!it.song && sounding()));
     if (it.song) {
       const line = `${on && !blinkOn ? " " : "♪"} ${it.song.title}${it.song.artist ? ` — ${it.song.artist}` : ""}`;
       text(line.length > 34 ? line.slice(0, 33) + "…" : line, LEFT, 64, { size: 26, color: on ? HUD : INK });

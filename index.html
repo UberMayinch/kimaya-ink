@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
   <script type="importmap">
     {
       "imports": {
@@ -105,6 +105,7 @@
         <video id="b-video" playsinline muted autoplay></video>
         <img id="b-shot" alt="your picture">
         <span class="booth-count" id="b-count" aria-live="assertive"></span>
+        <span class="booth-rec" aria-hidden="true">&#9679; REC</span>
         <div class="booth-intro">
           <p>take a picture, leave a note.</p>
           <p class="fine">your photo and note become public once kimaya approves them.</p>
@@ -117,6 +118,10 @@
         </div>
       </div>
 
+      <div class="booth-mode" role="group" aria-label="mode">
+        <button type="button" class="hud-btn" data-mode="photo" aria-pressed="true">PHOTO</button>
+        <button type="button" class="hud-btn" data-mode="movie" aria-pressed="false">MOVIE</button>
+      </div>
       <button class="shutter" id="b-shutter" aria-label="take picture"></button>
 
       <form class="booth-form" id="b-form">
@@ -137,8 +142,9 @@
   </div>
   <div class="booth-white" id="b-white" aria-hidden="true"></div>
 
-  <script src="script.js?v=4"></script>
-  <script src="booth.js?v=4"></script>
+  <script src="clips.js?v=1"></script>
+  <script src="script.js?v=5"></script>
+  <script src="booth.js?v=5"></script>
   <script type="module" src="journey.js?v=13"></script>
 </body>
 </html>

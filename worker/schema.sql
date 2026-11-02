@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS posts (
   name TEXT NOT NULL,
   message TEXT NOT NULL,
   photo BLOB NOT NULL,
+  clip BLOB,
+  clip_type TEXT,
   ip_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   created_at INTEGER NOT NULL

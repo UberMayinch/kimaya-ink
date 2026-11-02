@@ -15,20 +15,28 @@ async function call(path, opts = {}) {
   return r;
 }
 
-function card(p, pending) {
-  const el = document.createElement("div");
-  el.className = "card";
-  const img = document.createElement("img");
-  img.alt = "";
-  // pending photos need the token, so fetch them as blobs
-  call(`/admin/photo/${encodeURIComponent(p.id)}`)
+// pending media needs the token, so fetch it as a blob url
+function media(path, set) {
+  call(path)
     .then((r) => r.blob())
     .then((b) => {
       const url = URL.createObjectURL(b);
       blobs.push(url);
-      img.src = url;
+      set(url);
     })
     .catch(() => {});
+}
+
+function card(p, pending) {
+  const el = document.createElement("div");
+  el.className = "card";
+  const id = encodeURIComponent(p.id);
+  // movie posts loop their clip instead of the still
+  const movie = p.has_clip && window.KimayaClips;
+  const pic = movie ? KimayaClips.player("") : document.createElement("img");
+  if (!movie) pic.alt = "";
+  media(`/admin/photo/${id}`, (url) => { movie ? (pic.poster = url) : (pic.src = url); });
+  if (movie) media(`/admin/clip/${id}`, (url) => { pic.src = url; });
   const msg = document.createElement("p");
   msg.textContent = p.message;
   const by = document.createElement("small");
@@ -51,7 +59,7 @@ function card(p, pending) {
   };
   row.append(del);
 
-  el.append(img, msg, by, row);
+  el.append(pic, msg, by, row);
   return el;
 }
 

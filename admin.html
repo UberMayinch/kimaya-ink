@@ -6,14 +6,14 @@
   <meta name="robots" content="noindex">
   <title>kimaya · approvals</title>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <style>
     .admin { max-width: 900px; margin: 0 auto; }
     .admin form { display: flex; gap: 10px; margin: 20px 0; }
     .admin input { flex: 1; background: #0b0b0c; border: 1px solid #333; color: var(--ink); font: 20px var(--mono); padding: 6px 10px; }
     .queue { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 20px; }
     .card { background: #f4f1ea; color: #2a2724; padding: 10px; }
-    .card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+    .card img, .card video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
     .card p { margin: 8px 0; font: italic 19px var(--serif); overflow-wrap: anywhere; }
     .card small { font: 15px var(--mono); color: #6d6862; }
     .card .row { display: flex; justify-content: space-between; margin-top: 8px; }
@@ -36,6 +36,7 @@
     <h2>LIVE</h2>
     <div class="queue" id="live"></div>
   </main>
-  <script src="admin.js?v=1"></script>
+  <script src="clips.js?v=1"></script>
+  <script src="admin.js?v=2"></script>
 </body>
 </html>

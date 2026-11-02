@@ -251,7 +251,8 @@ body {
 
 .shot .frame { aspect-ratio: 4 / 3; }
 
-.frame img {
+.frame img,
+.frame video {
   display: block;
   width: 100%;
   height: 100%;
@@ -259,6 +260,8 @@ body {
   /* cheap CCD: punchy, warm, slightly blown */
   filter: contrast(1.08) saturate(1.18) brightness(1.04) sepia(.08);
 }
+
+.frame [hidden] { display: none; }
 
 /* vignette + highlight bloom */
 .frame::after {
@@ -342,7 +345,8 @@ body {
 /* hug the image so the stamp lands on the photo, not the letterbox */
 .viewer .frame { width: fit-content; margin: 0 auto; }
 
-.viewer .frame img {
+.viewer .frame img,
+.viewer .frame video {
   width: auto;
   height: auto;
   max-width: 100%;
@@ -388,7 +392,8 @@ body {
   .grain,
   .stage-msg,
   .battery i:last-child,
-  .empty strong { animation: none; }
+  .empty strong,
+  .booth-rec { animation: none; }
   .flash.on { animation: none; }
   .shot { transition: none; }
 }
@@ -467,7 +472,23 @@ body {
   object-fit: cover;
   display: none;
 }
-.booth-screen video { transform: scaleX(-1); }
+#b-video { transform: scaleX(-1); }
+
+/* movie mode: rec light over the live preview, photo / movie switch */
+.booth-rec {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  display: none;
+  color: #ff2a2a;
+  font-size: 26px;
+  letter-spacing: .08em;
+  text-shadow: 0 0 6px rgba(255, 0, 0, .7);
+  animation: blink 1s steps(1) infinite;
+}
+.booth-mode { display: none; justify-content: center; gap: 10px; }
+.booth-mode [aria-pressed="true"] { background: rgba(159, 232, 200, .18); }
+.booth.no-movie .booth-mode { display: none !important; }
 
 .booth-count {
   position: absolute;
@@ -535,7 +556,12 @@ body {
 .booth[data-state="intro"] .booth-intro,
 .booth[data-state="sent"] .booth-sent { display: grid; }
 .booth[data-state="live"] video,
-.booth[data-state="count"] video { display: block; }
+.booth[data-state="count"] video,
+.booth[data-state="rec"] #b-video { display: block; }
+.booth[data-state="rec"] .booth-rec { display: block; }
+.booth[data-state="live"] .booth-mode { display: flex; }
+.booth[data-state="review"] video.clip { display: block; }
+.booth[data-state="review"][data-mode="movie"] #b-shot { display: none; }
 .booth[data-state="live"] .shutter { display: block; }
 .booth[data-state="review"] img { display: block; }
 .booth[data-state="review"] .booth-form { display: grid; }

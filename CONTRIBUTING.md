@@ -104,7 +104,7 @@ songs.css       song chip look
 dev/            test pages, e.g. dev/songs-demo.html
 journey.js      the hero: her photograph -> her eye -> the camera -> its LCD (gallery + booth) -> its lens -> the photograph
 experience/     the hero's parts: portrait (2.5D photo), camera-world (the digicam), archive (the LCD), archive-data (what's on the card), post (optics), input
-assets/         kimaya.jpg (the photograph), kimaya-depth.png (its depth + layer map), sticker.png (fallback; the camera wears the page icon)
+assets/         kimaya.jpg (the photograph), kimaya-depth.png (its depth + layer map), sticker.png (on the camera, and the page's icon)
 guestbook-api.js  posting/listing for the guestbook (shared)
 uploads.js      prepares uploaded photos/videos (resize, strip metadata, stamp)
 drop.js         the share sheet: several photos/videos at once (window event kimaya:drop)

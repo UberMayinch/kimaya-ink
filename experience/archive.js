@@ -9,8 +9,8 @@
 //     -> { lcd, items, open(), close(), isOpen(), t, view, sel, select(i), step(dir), onAction(action, hit),
 //          drawLCD(), live(), rec, tick(now), srText }
 
-import { loadArchive, letterParagraphs } from "./archive-data.js?v=34";
-import { stampOf, wait } from "./util.js?v=34";
+import { loadArchive, letterParagraphs } from "./archive-data.js?v=35";
+import { stampOf, wait } from "./util.js?v=35";
 
 const W = 640, H = 480;
 const LEFT = 104; // the top-left of the screen sits under her sticker

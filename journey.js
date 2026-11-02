@@ -11,13 +11,13 @@
 // if WebGL is missing (or ?dead=1) the still photo stays and the old page below is the site.
 // dev: ?p=0.47 freezes p · ?demo=1 fills the card with placeholders · ?calm=1 reduced motion
 
-import { createController, stateAt, R } from "./experience/controller.js?v=34";
-import { createInput } from "./experience/input.js?v=34";
-import { createPortrait } from "./experience/portrait.js?v=34";
-import { createCameraWorld } from "./experience/camera-world.js?v=34";
-import { createArchive } from "./experience/archive.js?v=34";
-import { createPost } from "./experience/post.js?v=34";
-import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=34";
+import { createController, stateAt, R } from "./experience/controller.js?v=35";
+import { createInput } from "./experience/input.js?v=35";
+import { createPortrait } from "./experience/portrait.js?v=35";
+import { createCameraWorld } from "./experience/camera-world.js?v=35";
+import { createArchive } from "./experience/archive.js?v=35";
+import { createPost } from "./experience/post.js?v=35";
+import { clamp, lerp, smooth, smoother, win, table, loadImage, wait } from "./experience/util.js?v=35";
 
 const journey = document.getElementById("journey");
 const pin = journey.querySelector(".journey-pin");
@@ -33,7 +33,7 @@ try {
   const [photoImg, depthImg, stickerImg] = await Promise.all([
     loadImage("assets/kimaya.jpg"),
     loadImage("assets/kimaya-depth.png?v=2"),
-    loadIcon(),
+    loadImage("assets/sticker.png"),
   ]);
   await Promise.race([
     Promise.all([document.fonts.load('30px "VT323"'), document.fonts.load('italic 26px "Instrument Serif"'), document.fonts.load('600 40px "Caveat"')]).catch(() => {}),
@@ -47,22 +47,6 @@ try {
 } catch (err) {
   console.warn("[journey] falling back to the still:", err);
   journey.classList.add("dead");
-}
-
-// the sticker on the camera is the page's own icon (the svg in <link rel="icon">), rasterised square;
-// the old drawn sticker stays as the fallback
-async function loadIcon() {
-  try {
-    const href = document.querySelector('link[rel="icon"]')?.href;
-    if (!href) throw new Error("no icon");
-    const img = await loadImage(href);
-    const c = document.createElement("canvas");
-    c.width = c.height = 256;
-    c.getContext("2d").drawImage(img, 0, 0, 256, 256);
-    return c;
-  } catch {
-    return loadImage("assets/sticker.png");
-  }
 }
 
 function init(THREE, RoundedBoxGeometry, photoImg, depthImg, stickerImg) {
